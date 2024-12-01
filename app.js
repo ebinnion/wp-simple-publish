@@ -24,15 +24,25 @@ document.addEventListener('DOMContentLoaded', () => {
 		settingsModal.style.display = 'flex';
 	});
 
-	// Handle image preview
+	// Handle image preview and format selection
+	imageInput.setAttribute('multiple', 'true'); // Enable multiple image selection
 	imageInput.addEventListener('change', (e) => {
-		const file = e.target.files[0];
-		if (file) {
-			const reader = new FileReader();
-			reader.onload = (e) => {
-				imagePreview.innerHTML = `<img src="${e.target.result}">`;
-			};
-			reader.readAsDataURL(file);
+		const files = e.target.files;
+		if (files.length > 0) {
+			imagePreview.innerHTML = ''; // Clear previous previews
+			
+			// Update post format based on number of images
+			const formatSelector = document.querySelector('#post-format');
+			formatSelector.value = files.length > 1 ? 'gallery' : 'image';
+
+			// Preview all selected images
+			Array.from(files).forEach(file => {
+				const reader = new FileReader();
+				reader.onload = (e) => {
+					imagePreview.innerHTML += `<img src="${e.target.result}">`;
+				};
+				reader.readAsDataURL(file);
+			});
 		}
 	});
 
@@ -40,10 +50,11 @@ document.addEventListener('DOMContentLoaded', () => {
 	const formatSelector = document.createElement('select');
 	formatSelector.id = 'post-format';
 	formatSelector.innerHTML = `
-		<option value="standard">Standard</option>
-		<option value="image">Image</option>
 		<option value="status">Status</option>
+		<option value="image">Image</option>
+		<option value="gallery">Gallery</option>
 		<option value="link">Link</option>
+		<option value="standard">Standard</option>
 	`;
 	// Insert after textarea
 	document.querySelector('textarea').after(formatSelector);
@@ -51,20 +62,21 @@ document.addEventListener('DOMContentLoaded', () => {
 	// Handle posting
 	postButton.addEventListener('click', async () => {
 		const text = document.querySelector('textarea').value;
-		const imageUrl = imagePreview.querySelector('img')?.src;
+		const images = imagePreview.querySelectorAll('img');
 		const format = document.querySelector('#post-format').value;
 		
-		if (text || imageUrl) {
+		if (text || images.length > 0) {
 			try {
 				postButton.disabled = true;
 				postButton.textContent = 'Publishing...';
 				
-				await publishToWordPress(text, imageUrl, wpConfig, format);
+				await publishToWordPress(text, Array.from(images).map(img => img.src), wpConfig, format);
 				
 				// Clear form
 				document.querySelector('textarea').value = '';
 				imagePreview.innerHTML = '';
 				imageInput.value = '';
+				formatSelector.value = 'standard';
 			} catch (error) {
 				alert('Failed to publish: ' + error.message);
 			} finally {
@@ -112,48 +124,63 @@ function createSettingsModal(config) {
 	return modal;
 }
 
-async function publishToWordPress(text, imageUrl, config, format) {
+async function publishToWordPress(text, imageUrls, config, format) {
 	if (!config.url || !config.username || !config.password) {
 		throw new Error('Please configure WordPress settings first');
 	}
 
 	try {
-		let mediaId = null;
-		let mediaUrl = null;
-		if (imageUrl) {
-			// Convert base64 to blob
-			const response = await fetch(imageUrl);
-			const blob = await response.blob();
-			
-			// Upload image
-			const formData = new FormData();
-			formData.append('file', blob, 'image.jpg');
+		let mediaIds = [];
+		let mediaUrls = [];
+		
+		// Upload all images
+		if (imageUrls.length > 0) {
+			for (const imageUrl of imageUrls) {
+				// Convert base64 to blob
+				const response = await fetch(imageUrl);
+				const blob = await response.blob();
+				
+				// Upload image
+				const formData = new FormData();
+				formData.append('file', blob, 'image.jpg');
 
-			const mediaResponse = await fetch(`${config.url}/wp-json/wp/v2/media`, {
-				method: 'POST',
-				headers: {
-					'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`)
-				},
-				body: formData
-			});
+				const mediaResponse = await fetch(`${config.url}/wp-json/wp/v2/media`, {
+					method: 'POST',
+					headers: {
+						'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`)
+					},
+					body: formData
+				});
 
-			if (!mediaResponse.ok) {
-				throw new Error('Failed to upload image');
+				if (!mediaResponse.ok) {
+					throw new Error('Failed to upload image');
+				}
+
+				const mediaData = await mediaResponse.json();
+				mediaIds.push(mediaData.id);
+				mediaUrls.push(mediaData.source_url);
 			}
-
-			const mediaData = await mediaResponse.json();
-			mediaId = mediaData.id;
-			mediaUrl = mediaData.source_url;
 		}
 
 		// Format content with Gutenberg blocks
 		let blocks = [];
 		
-		// Add image block if we have an image
-		if (mediaUrl) {
-			blocks.push(`<!-- wp:image {"id":${mediaId},"sizeSlug":"large"} -->
-<figure class="wp-block-image size-large"><img src="${mediaUrl}" alt="" class="wp-image-${mediaId}"/></figure>
+		// Add image/gallery block if we have images
+		if (mediaUrls.length > 0) {
+			if (mediaUrls.length === 1) {
+				blocks.push(`<!-- wp:image {"id":${mediaIds[0]},"sizeSlug":"large"} -->
+<figure class="wp-block-image size-large"><img src="${mediaUrls[0]}" alt="" class="wp-image-${mediaIds[0]}"/></figure>
 <!-- /wp:image -->`);
+			} else {
+				blocks.push(`<!-- wp:gallery {"columns":2,"linkTo":"none","ids":[${mediaIds.join(',')}]} -->
+<figure class="wp-block-gallery has-nested-images columns-2 is-cropped">
+    ${mediaUrls.map((url, index) => `
+    <!-- wp:image {"id":${mediaIds[index]},"sizeSlug":"large","linkDestination":"none"} -->
+    <figure class="wp-block-image size-large"><img src="${url}" alt="" class="wp-image-${mediaIds[index]}"/></figure>
+    <!-- /wp:image -->`).join('\n')}
+</figure>
+<!-- /wp:gallery -->`);
+			}
 		}
 
 		// Add text content as paragraphs
@@ -172,17 +199,17 @@ async function publishToWordPress(text, imageUrl, config, format) {
 			title: text.split('\n')[0] || 'New Post',
 			content: content,
 			status: 'draft',
-			featured_media: mediaId,
+			featured_media: mediaIds[0] || 0, // Set first image as featured image
 			format: format
 		};
 
 		const postResponse = await fetch(`${config.url}/wp-json/wp/v2/posts`, {
 			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`)
-			},
-			body: JSON.stringify(postData)
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`)
+				},
+				body: JSON.stringify(postData)
 		});
 
 		if (!postResponse.ok) {
