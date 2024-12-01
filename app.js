@@ -1,3 +1,37 @@
+// Add at the top of the file, outside DOMContentLoaded
+const publishQueue = {
+	queue: [],
+	
+	add: function(data) {
+		this.queue.push(data);
+		localStorage.setItem('publishQueue', JSON.stringify(this.queue));
+	},
+	
+	remove: function(index) {
+		this.queue.splice(index, 1);
+		localStorage.setItem('publishQueue', JSON.stringify(this.queue));
+	},
+	
+	load: function() {
+		this.queue = JSON.parse(localStorage.getItem('publishQueue') || '[]');
+	},
+	
+	process: async function() {
+		if (!navigator.onLine) return;
+		
+		for (let i = this.queue.length - 1; i >= 0; i--) {
+			const item = this.queue[i];
+			try {
+				await publishToWordPress(item.text, item.imageUrls, item.config, item.format);
+				this.remove(i);
+				alert('Queued post has been published!');
+			} catch (error) {
+				console.error('Failed to publish queued item:', error);
+			}
+		}
+	}
+};
+
 document.addEventListener('DOMContentLoaded', () => {
 	const imageInput = document.getElementById('imageInput');
 	const imagePreview = document.getElementById('imagePreview');
@@ -67,7 +101,13 @@ document.addEventListener('DOMContentLoaded', () => {
 	// Insert after textarea
 	document.querySelector('textarea').after(formatSelector);
 
-	// Handle posting
+	// Load and process queue when app starts
+	publishQueue.load();
+	if (navigator.onLine) {
+		publishQueue.process();
+	}
+
+	// Modify the post button handler
 	postButton.addEventListener('click', async () => {
 		const text = document.querySelector('textarea').value;
 		const images = imagePreview.querySelectorAll('img');
@@ -78,7 +118,17 @@ document.addEventListener('DOMContentLoaded', () => {
 				postButton.disabled = true;
 				postButton.textContent = 'Publishing...';
 				
-				await publishToWordPress(text, Array.from(images).map(img => img.src), wpConfig, format);
+				if (!navigator.onLine) {
+					publishQueue.add({
+						text,
+						imageUrls: Array.from(images).map(img => img.src),
+						config: wpConfig,
+						format
+					});
+					alert('You are offline. Post will be published when connection is restored.');
+				} else {
+					await publishToWordPress(text, Array.from(images).map(img => img.src), wpConfig, format);
+				}
 				
 				// Clear form
 				document.querySelector('textarea').value = '';
@@ -92,6 +142,16 @@ document.addEventListener('DOMContentLoaded', () => {
 				postButton.textContent = 'Post';
 			}
 		}
+	});
+
+	// Add online/offline handlers
+	window.addEventListener('online', () => {
+		document.body.classList.remove('offline');
+		publishQueue.process();
+	});
+
+	window.addEventListener('offline', () => {
+		document.body.classList.add('offline');
 	});
 });
 
