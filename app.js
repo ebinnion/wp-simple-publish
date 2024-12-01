@@ -240,6 +240,8 @@ function createSettingsModal(config) {
 }
 
 async function publishToWordPress(text, imageUrls, config, format) {
+	console.log('Starting publish:', { hasText: !!text, imageCount: imageUrls.length, format });
+
 	if (!config.url || !config.username || !config.password) {
 		throw new Error('Please configure WordPress settings first');
 	}
@@ -250,6 +252,7 @@ async function publishToWordPress(text, imageUrls, config, format) {
 		
 		// Upload all images
 		if (imageUrls.length > 0) {
+			console.log('Uploading images...');
 			for (const imageUrl of imageUrls) {
 				// Convert base64 to blob
 				const response = await fetch(imageUrl);
@@ -268,6 +271,7 @@ async function publishToWordPress(text, imageUrls, config, format) {
 				});
 
 				if (!mediaResponse.ok) {
+					console.error('Media upload failed:', await mediaResponse.text());
 					throw new Error('Failed to upload image');
 				}
 
@@ -275,6 +279,7 @@ async function publishToWordPress(text, imageUrls, config, format) {
 				mediaIds.push(mediaData.id);
 				mediaUrls.push(mediaData.source_url);
 			}
+			console.log('Images uploaded:', mediaIds);
 		}
 
 		// Format content with Gutenberg blocks
@@ -289,10 +294,10 @@ async function publishToWordPress(text, imageUrls, config, format) {
 			} else {
 				blocks.push(`<!-- wp:gallery {"columns":2,"linkTo":"none","ids":[${mediaIds.join(',')}]} -->
 <figure class="wp-block-gallery has-nested-images columns-2 is-cropped">
-    ${mediaUrls.map((url, index) => `
-    <!-- wp:image {"id":${mediaIds[index]},"sizeSlug":"large","linkDestination":"none"} -->
-    <figure class="wp-block-image size-large"><img src="${url}" alt="" class="wp-image-${mediaIds[index]}"/></figure>
-    <!-- /wp:image -->`).join('\n')}
+	${mediaUrls.map((url, index) => `
+	<!-- wp:image {"id":${mediaIds[index]},"sizeSlug":"large","linkDestination":"none"} -->
+	<figure class="wp-block-image size-large"><img src="${url}" alt="" class="wp-image-${mediaIds[index]}"/></figure>
+	<!-- /wp:image -->`).join('\n')}
 </figure>
 <!-- /wp:gallery -->`);
 			}
@@ -309,29 +314,42 @@ async function publishToWordPress(text, imageUrls, config, format) {
 		// Join blocks with newlines
 		const content = blocks.join('\n\n');
 
+		console.log('Creating post...');
+		
 		// Create post
 		const postData = {
 			title: text.split('\n')[0] || 'New Post',
 			content: content,
 			status: 'publish',
-			featured_media: mediaIds[0] || 0, // Set first image as featured image
+			featured_media: mediaIds[0] || 0,
 			format: format
 		};
 
+		console.log('Post data:', postData);
+
 		const postResponse = await fetch(`${config.url}/wp-json/wp/v2/posts`, {
 			method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`)
-				},
-				body: JSON.stringify(postData)
+			headers: {
+				'Content-Type': 'application/json',
+				'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`)
+			},
+			body: JSON.stringify(postData)
 		});
 
 		if (!postResponse.ok) {
+			const errorText = await postResponse.text();
+			console.error('Post creation failed:', {
+				status: postResponse.status,
+				statusText: postResponse.statusText,
+				error: errorText
+			});
 			throw new Error('Failed to create post');
 		}
 
-		return await postResponse.json();
+		const result = await postResponse.json();
+		console.log('Post created successfully:', result);
+		return result;
+
 	} catch (error) {
 		console.error('Publishing error:', error);
 		throw error;
