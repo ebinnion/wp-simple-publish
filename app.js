@@ -313,7 +313,7 @@ async function publishToWordPress(text, imageUrls, config, format) {
 		const postData = {
 			title: text.split('\n')[0] || 'New Post',
 			content: content,
-			status: 'draft',
+			status: 'publish',
 			featured_media: mediaIds[0] || 0, // Set first image as featured image
 			format: format
 		};
