@@ -2,7 +2,6 @@ document.addEventListener('DOMContentLoaded', () => {
 	const imageInput = document.getElementById('imageInput');
 	const imagePreview = document.getElementById('imagePreview');
 	const postButton = document.getElementById('postButton');
-	const postsContainer = document.getElementById('posts');
 
 	// Add credential fields
 	const wpConfig = {
@@ -61,7 +60,6 @@ document.addEventListener('DOMContentLoaded', () => {
 				postButton.textContent = 'Publishing...';
 				
 				await publishToWordPress(text, imageUrl, wpConfig, format);
-				createPost(text, imageUrl);
 				
 				// Clear form
 				document.querySelector('textarea').value = '';
@@ -75,17 +73,6 @@ document.addEventListener('DOMContentLoaded', () => {
 			}
 		}
 	});
-
-	function createPost(text, imageUrl) {
-		const post = document.createElement('div');
-		post.className = 'post';
-		post.innerHTML = `
-			${text ? `<p>${text}</p>` : ''}
-			${imageUrl ? `<img src="${imageUrl}">` : ''}
-			<small>${new Date().toLocaleString()}</small>
-		`;
-		postsContainer.insertBefore(post, postsContainer.firstChild);
-	}
 });
 
 function createSettingsModal(config) {
@@ -184,7 +171,7 @@ async function publishToWordPress(text, imageUrl, config, format) {
 		const postData = {
 			title: text.split('\n')[0] || 'New Post',
 			content: content,
-			status: 'publish',
+			status: 'draft',
 			featured_media: mediaId,
 			format: format
 		};
