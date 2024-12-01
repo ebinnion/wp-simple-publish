@@ -55,6 +55,12 @@ textarea, input, select, #post-format {
     margin: 0;
 }
 
+textarea {
+    height: 200px;
+    min-height: 200px;
+    resize: vertical;
+}
+
 button {
     background: var(--primary-color);
     color: white;
