@@ -85,8 +85,18 @@ button {
 }
 
 .settings-btn {
-    background: #666;
-    margin-bottom: 10px;
+    background: transparent;
+    color: var(--text-color);
+    opacity: 0.5;
+    padding: 8px;
+    font-size: 16px;
+    margin: 0;
+    min-width: auto;
+    border: none;
+}
+
+.settings-btn:hover {
+    opacity: 1;
 }
 
 .settings-modal {
@@ -219,4 +229,16 @@ button {
         transform: translateY(0);
         opacity: 1;
     }
+}
+
+.button-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+#postButton {
+    flex: 1;
+    margin: 0;
 }
