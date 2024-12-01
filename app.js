@@ -37,17 +37,30 @@ document.addEventListener('DOMContentLoaded', () => {
 		}
 	});
 
+	// Add post format selector to the form
+	const formatSelector = document.createElement('select');
+	formatSelector.id = 'post-format';
+	formatSelector.innerHTML = `
+		<option value="standard">Standard</option>
+		<option value="image">Image</option>
+		<option value="status">Status</option>
+		<option value="link">Link</option>
+	`;
+	// Insert after textarea
+	document.querySelector('textarea').after(formatSelector);
+
 	// Handle posting
 	postButton.addEventListener('click', async () => {
 		const text = document.querySelector('textarea').value;
 		const imageUrl = imagePreview.querySelector('img')?.src;
+		const format = document.querySelector('#post-format').value;
 		
 		if (text || imageUrl) {
 			try {
 				postButton.disabled = true;
 				postButton.textContent = 'Publishing...';
 				
-				await publishToWordPress(text, imageUrl, wpConfig);
+				await publishToWordPress(text, imageUrl, wpConfig, format);
 				createPost(text, imageUrl);
 				
 				// Clear form
@@ -112,7 +125,7 @@ function createSettingsModal(config) {
 	return modal;
 }
 
-async function publishToWordPress(text, imageUrl, config) {
+async function publishToWordPress(text, imageUrl, config, format) {
 	if (!config.url || !config.username || !config.password) {
 		throw new Error('Please configure WordPress settings first');
 	}
@@ -148,8 +161,9 @@ async function publishToWordPress(text, imageUrl, config) {
 		const postData = {
 			title: text.split('\n')[0] || 'New Post',
 			content: text,
-			status: 'draft',
-			featured_media: mediaId
+			status: 'publish',
+			featured_media: mediaId,
+			format: format
 		};
 
 		const postResponse = await fetch(`${config.url}/wp-json/wp/v2/posts`, {
