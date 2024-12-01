@@ -132,6 +132,7 @@ async function publishToWordPress(text, imageUrl, config, format) {
 
 	try {
 		let mediaId = null;
+		let mediaUrl = null;
 		if (imageUrl) {
 			// Convert base64 to blob
 			const response = await fetch(imageUrl);
@@ -155,12 +156,34 @@ async function publishToWordPress(text, imageUrl, config, format) {
 
 			const mediaData = await mediaResponse.json();
 			mediaId = mediaData.id;
+			mediaUrl = mediaData.source_url;
 		}
+
+		// Format content with Gutenberg blocks
+		let blocks = [];
+		
+		// Add image block if we have an image
+		if (mediaUrl) {
+			blocks.push(`<!-- wp:image {"id":${mediaId},"sizeSlug":"large"} -->
+<figure class="wp-block-image size-large"><img src="${mediaUrl}" alt="" class="wp-image-${mediaId}"/></figure>
+<!-- /wp:image -->`);
+		}
+
+		// Add text content as paragraphs
+		const paragraphs = text.split('\n\n').filter(p => p.trim());
+		paragraphs.forEach(paragraph => {
+			blocks.push(`<!-- wp:paragraph -->
+<p>${paragraph.trim()}</p>
+<!-- /wp:paragraph -->`);
+		});
+
+		// Join blocks with newlines
+		const content = blocks.join('\n\n');
 
 		// Create post
 		const postData = {
 			title: text.split('\n')[0] || 'New Post',
-			content: text,
+			content: content,
 			status: 'publish',
 			featured_media: mediaId,
 			format: format
