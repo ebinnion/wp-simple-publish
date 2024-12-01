@@ -45,13 +45,14 @@ body {
     gap: 10px;
 }
 
-textarea, input, select {
+textarea, input, select, #post-format {
     width: 100%;
     background: var(--surface-color);
     color: var(--text-color);
     border: 1px solid var(--border-color);
     border-radius: 5px;
     padding: 10px;
+    margin: 0;
 }
 
 button {
@@ -104,9 +105,8 @@ button {
 }
 
 .modal-content input {
-    background: var(--surface-color);
-    color: var(--text-color);
-    border: 1px solid var(--border-color);
+    width: 100%;
+    margin-bottom: 10px;
 }
 
 .modal-buttons {
@@ -142,4 +142,9 @@ button {
 ::placeholder {
     color: var(--text-color);
     opacity: 0.5;
+}
+
+/* Add box-sizing to all elements */
+* {
+    box-sizing: border-box;
 }
