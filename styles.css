@@ -79,8 +79,17 @@ button {
 }
 
 .settings-btn {
-    background: #666;
-    margin-bottom: 10px;
+    background: transparent;
+    color: var(--text-color);
+    opacity: 0.5;
+    padding: 8px;
+    font-size: 16px;
+    border: none;
+    cursor: pointer;
+}
+
+.settings-btn:hover {
+    opacity: 1;
 }
 
 .settings-modal {
@@ -147,4 +156,14 @@ button {
 /* Add box-sizing to all elements */
 * {
     box-sizing: border-box;
+}
+
+.button-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#postButton {
+    flex: 1;
 }

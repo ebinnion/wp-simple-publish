@@ -12,9 +12,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	// Create settings UI
 	const settingsBtn = document.createElement('button');
-	settingsBtn.textContent = '⚙️ Settings';
+	settingsBtn.textContent = '⚙️';
 	settingsBtn.className = 'settings-btn';
-	document.querySelector('.post-form').prepend(settingsBtn);
+
+	// Create button container
+	const buttonContainer = document.createElement('div');
+	buttonContainer.className = 'button-container';
+
+	// Move the post button into the container and add settings button
+	postButton.parentNode.insertBefore(buttonContainer, postButton);
+	buttonContainer.appendChild(postButton);
+	buttonContainer.appendChild(settingsBtn);
 
 	// Create settings modal
 	const settingsModal = createSettingsModal(wpConfig);
@@ -96,7 +104,7 @@ function createSettingsModal(config) {
 			<input type="url" id="wp_url" placeholder="WordPress Site URL (https://your-site.com)" value="${config.url}">
 			<input type="text" id="wp_username" placeholder="WordPress Username" value="${config.username}">
 			<input type="password" id="wp_password" placeholder="Application Password" value="${config.password}">
-			<small>Generate an Application Password in your WordPress profile</small>
+			<small>Generate an Application Password in your WordPress profile.</small>
 			<div class="modal-buttons">
 				<button id="saveSettings">Save</button>
 				<button id="cancelSettings">Cancel</button>
