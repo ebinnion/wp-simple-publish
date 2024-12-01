@@ -24,11 +24,53 @@ const publishQueue = {
 			try {
 				await publishToWordPress(item.text, item.imageUrls, item.config, item.format);
 				this.remove(i);
-				alert('Queued post has been published!');
+				notices.success('Queued post has been published!');
 			} catch (error) {
 				console.error('Failed to publish queued item:', error);
 			}
 		}
+	}
+};
+
+const notices = {
+	container: null,
+	
+	init: function() {
+		this.container = document.createElement('div');
+		this.container.className = 'notices';
+		document.body.appendChild(this.container);
+	},
+	
+	show: function(message, type = 'info') {
+		const notice = document.createElement('div');
+		notice.className = `notice notice-${type}`;
+		
+		const text = document.createElement('span');
+		text.textContent = message;
+		
+		const closeBtn = document.createElement('button');
+		closeBtn.className = 'notice-close';
+		closeBtn.innerHTML = '×';
+		closeBtn.onclick = () => notice.remove();
+		
+		notice.appendChild(text);
+		notice.appendChild(closeBtn);
+		this.container.appendChild(notice);
+		
+		// Optional: Auto-remove after 5 seconds
+		setTimeout(() => notice.remove(), 5000);
+	},
+	
+	success: function(message) {
+		this.show(message, 'success');
+	},
+	
+	info: function(message) {
+		this.show(message, 'info');
+	},
+	
+	error: function(message) {
+		this.show(message, 'error');
 	}
 };
 
@@ -107,6 +149,9 @@ document.addEventListener('DOMContentLoaded', () => {
 		publishQueue.process();
 	}
 
+	// Initialize notices
+	notices.init();
+
 	// Modify the post button handler
 	postButton.addEventListener('click', async () => {
 		const text = document.querySelector('textarea').value;
@@ -125,9 +170,10 @@ document.addEventListener('DOMContentLoaded', () => {
 						config: wpConfig,
 						format
 					});
-					alert('You are offline. Post will be published when connection is restored.');
+					notices.info('You are offline. Post will be published when connection is restored.');
 				} else {
 					await publishToWordPress(text, Array.from(images).map(img => img.src), wpConfig, format);
+					notices.success('Post published successfully!');
 				}
 				
 				// Clear form
@@ -136,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				imageInput.value = '';
 				formatSelector.value = 'standard';
 			} catch (error) {
-				alert('Failed to publish: ' + error.message);
+				notices.error('Failed to publish: ' + error.message);
 			} finally {
 				postButton.disabled = false;
 				postButton.textContent = 'Post';
@@ -182,11 +228,12 @@ function createSettingsModal(config) {
 		localStorage.setItem('wp_username', config.username);
 		localStorage.setItem('wp_password', config.password);
 
+		notices.success('Settings saved successfully');
 		modal.style.display = 'none';
 	});
 
 	modal.querySelector('#cancelSettings').addEventListener('click', () => {
-		modal.style.display = 'none';
+			modal.style.display = 'none';
 	});
 
 	return modal;

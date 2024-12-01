@@ -85,17 +85,8 @@ button {
 }
 
 .settings-btn {
-    background: transparent;
-    color: var(--text-color);
-    opacity: 0.5;
-    padding: 8px;
-    font-size: 16px;
-    border: none;
-    cursor: pointer;
-}
-
-.settings-btn:hover {
-    opacity: 1;
+    background: #666;
+    margin-bottom: 10px;
 }
 
 .settings-modal {
@@ -164,12 +155,68 @@ button {
     box-sizing: border-box;
 }
 
-.button-container {
+.notices {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    left: 20px;
+    z-index: 1000;
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
 }
 
-#postButton {
-    flex: 1;
+.notice {
+    padding: 12px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    pointer-events: auto;
+    animation: slideIn 0.3s ease;
+}
+
+.notice-success {
+    background: #e7f6ed;
+    color: #0a5a2d;
+    border: 1px solid #95e3b6;
+}
+
+.notice-info {
+    background: #e7f3ff;
+    color: #0a4b8a;
+    border: 1px solid #95c7f1;
+}
+
+.notice-error {
+    background: #ffe7e7;
+    color: #8a0a0a;
+    border: 1px solid #f19595;
+}
+
+.notice-close {
+    background: transparent;
+    border: none;
+    padding: 0 0 0 12px;
+    cursor: pointer;
+    font-size: 18px;
+    opacity: 0.5;
+    color: currentColor;
+}
+
+.notice-close:hover {
+    opacity: 1;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
