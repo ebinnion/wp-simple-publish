@@ -1,6 +1,6 @@
 {
     "name": "WP Simple Publish",
-    "short_name": "WP Publish",
+    "short_name": "WP Simple Publish",
     "start_url": "./",
     "scope": "./",
     "display": "standalone",
