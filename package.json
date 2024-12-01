@@ -5,7 +5,8 @@
   "main": "app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "node build.js"
+    "build": "node build.js",
+    "deploy": "git checkout main && node build.js && git add -A && git commit -m 'Update service worker CACHE_NAME' || true && git checkout gh-pages && git merge main && git push origin gh-pages && git checkout main"
   },
   "author": "Eric Binnion",
   "license": "GPL-2.0-or-later"
