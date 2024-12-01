@@ -7,6 +7,6 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "node build.js"
   },
-  "author": "",
+  "author": "Eric Binnion",
   "license": "GPL-2.0-or-later"
 }
