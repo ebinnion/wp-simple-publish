@@ -1,13 +1,14 @@
 {
     "name": "WP Simple Publish",
     "short_name": "WP Publish",
-    "start_url": "/",
+    "start_url": "./",
+    "scope": "./",
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#0A84FF",
     "icons": [
         {
-            "src": "icon-512.png",
+            "src": "./icon-512.png",
             "sizes": "512x512",
             "type": "image/png"
         }
