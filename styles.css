@@ -1,7 +1,33 @@
+/* Define CSS variables for both themes */
+:root {
+    --bg-color: #ffffff;
+    --surface-color: #ffffff;
+    --text-color: #000000;
+    --border-color: #ddd;
+    --primary-color: #007AFF;
+    --shadow-color: rgba(0,0,0,0.1);
+    --modal-overlay: rgba(0,0,0,0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-color: #000000;
+        --surface-color: #1c1c1e;
+        --text-color: #ffffff;
+        --border-color: #333;
+        --primary-color: #0A84FF;
+        --shadow-color: rgba(0,0,0,0.3);
+        --modal-overlay: rgba(0,0,0,0.7);
+    }
+}
+
+/* Apply variables to existing styles */
 body {
     margin: 0;
     padding: 20px;
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
 }
 
 .container {
@@ -10,26 +36,26 @@ body {
 }
 
 .post-form {
-    background: #fff;
+    background: var(--surface-color);
     padding: 15px;
     border-radius: 10px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 5px var(--shadow-color);
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
-textarea {
+textarea, input, select {
     width: 100%;
-    height: 100px;
-    margin-bottom: 10px;
-    border: 1px solid #ddd;
+    background: var(--surface-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
     border-radius: 5px;
     padding: 10px;
 }
 
 button {
-    background: #007AFF;
+    background: var(--primary-color);
     color: white;
     border: none;
     padding: 10px 20px;
@@ -63,13 +89,14 @@ button {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0,0,0,0.5);
+    background: var(--modal-overlay);
     justify-content: center;
     align-items: center;
 }
 
 .modal-content {
-    background: white;
+    background: var(--surface-color);
+    color: var(--text-color);
     padding: 20px;
     border-radius: 10px;
     width: 90%;
@@ -77,11 +104,9 @@ button {
 }
 
 .modal-content input {
-    width: 100%;
-    padding: 8px;
-    margin: 10px 0;
-    border: 1px solid #ddd;
-    border-radius: 5px;
+    background: var(--surface-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
 }
 
 .modal-buttons {
@@ -95,13 +120,26 @@ button {
     width: 100%;
     padding: 8px;
     margin-bottom: 10px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-color);
     border-radius: 5px;
-    background-color: white;
+    background-color: var(--surface-color);
+    color: var(--text-color);
+}
+
+/* Optional: Style the dropdown options */
+#post-format option {
+    background-color: var(--surface-color);
+    color: var(--text-color);
 }
 
 .post img {
     max-width: 100%;
     height: auto;
     border-radius: 10px;
+}
+
+/* Style for placeholder text */
+::placeholder {
+    color: var(--text-color);
+    opacity: 0.5;
 }
