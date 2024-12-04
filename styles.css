@@ -42,7 +42,7 @@ body {
     box-shadow: 0 2px 5px var(--shadow-color);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 16px;
 }
 
 textarea, input, select, #post-format {
@@ -59,6 +59,7 @@ textarea {
     height: 200px;
     min-height: 200px;
     resize: vertical;
+    margin-bottom: 8px;
 }
 
 button {
@@ -235,10 +236,188 @@ button {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 10px;
+    margin-top: 8px;
 }
 
 #postButton {
     flex: 1;
     margin: 0;
+}
+
+/* Base styles */
+:root {
+    --primary-color: #2271b1;
+    --danger-color: #dc3232;
+    --success-color: #46b450;
+    --font-size-base: 16px;
+    --spacing-base: 16px;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+    margin: 0;
+    padding: var(--spacing-base);
+    font-size: var(--font-size-base);
+    line-height: 1.5;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+/* Mobile-first textarea */
+textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 12px;
+    font-size: 18px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: var(--spacing-base);
+    box-sizing: border-box;
+}
+
+/* Larger, touch-friendly buttons */
+button {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    padding: 16px 24px;
+    font-size: 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin: 8px 0;
+    min-width: 100px;
+    touch-action: manipulation;
+}
+
+/* Settings button specific styles */
+.settings-btn {
+    font-size: 24px;
+    padding: 16px;
+    margin-left: 8px;
+}
+
+/* Image input and preview */
+#imageInput {
+    font-size: 16px;
+    margin: 8px 0;
+    width: 100%;
+}
+
+#imagePreview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin: 8px 0;
+}
+
+#imagePreview img {
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    object-fit: cover;
+}
+
+/* Format selector */
+#post-format {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin: 8px 0;
+    background-color: var(--surface-color);
+    color: var(--text-color);
+}
+
+/* Settings modal */
+.settings-modal {
+    padding: 20px;
+}
+
+.modal-content {
+    padding: 24px;
+    border-radius: 12px;
+}
+
+.modal-content input {
+    width: 100%;
+    padding: 12px;
+    font-size: 18px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    margin: 8px 0;
+    box-sizing: border-box;
+}
+
+/* Notices */
+.notices {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    left: 20px;
+    z-index: 1000;
+}
+
+.notice {
+    background: white;
+    padding: 16px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 16px;
+}
+
+.notice-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    padding: 8px;
+    min-width: auto;
+    color: #666;
+}
+
+/* Status-specific notice colors */
+.notice-success {
+    border-left: 4px solid var(--success-color);
+}
+
+.notice-error {
+    border-left: 4px solid var(--danger-color);
+}
+
+.notice-info {
+    border-left: 4px solid var(--primary-color);
+}
+
+/* Offline status */
+body.offline {
+    opacity: 0.8;
+}
+
+/* Media Queries for larger screens */
+@media (min-width: 768px) {
+    body {
+        padding: 32px;
+    }
+    
+    .button-container {
+        display: flex;
+        gap: 16px;
+    }
+    
+    button {
+        width: auto;
+    }
+}
+
+/* Safe area insets for modern mobile devices */
+@supports (padding: max(0px)) {
+    body {
+        padding-left: max(var(--spacing-base), env(safe-area-inset-left));
+        padding-right: max(var(--spacing-base), env(safe-area-inset-right));
+        padding-bottom: max(var(--spacing-base), env(safe-area-inset-bottom));
+    }
 }
