@@ -25,11 +25,7 @@ class PostQueue {
 			if (navigator.onLine) {
 				for (const [id, post] of this.posts.entries()) {
 					if (post.status !== POST_STATUS.COMPLETED) {
-						// Reset status for any previously uploading items
-						if (post.status === POST_STATUS.UPLOADING) {
-							post.status = POST_STATUS.QUEUED;
-							await this.saveToStorage();
-						}
+						// Don't reset status - we want to resume from where we left off
 						await this.processPost(id);
 					}
 				}
@@ -171,23 +167,30 @@ class PostQueue {
 				uploadedIds: [],
 				uploadedUrls: []
 			};
+			post.draftId = post.draftId || null; // Track draft ID
 			this.updateUI(id);
 			this.saveToStorage();
 
-			// First create a draft post
-			console.log('Creating initial draft post...');
-			const draftPost = await this.createPost({
-				...post.data,
-				status: 'draft',
-				content: 'Uploading media...' // Temporary content
-			});
+			// Create draft post only if we don't have one
+			if (!post.draftId) {
+				console.log('Creating initial draft post...');
+				const draftPost = await this.createPost({
+					...post.data,
+					status: 'draft',
+					content: 'Uploading media...' // Temporary content
+				});
 
-			console.log('Draft post created:', draftPost.id);
-			post.draftId = draftPost.id;
-			this.saveToStorage();
+				console.log('Draft post created:', draftPost.id);
+				post.draftId = draftPost.id;
+				await this.saveToStorage();
+			} else {
+				console.log('Resuming with existing draft:', post.draftId);
+			}
 
-			// Upload images and attach them to the draft
+			// Upload remaining images
 			const remainingImages = post.data.imageUrls.slice(post.mediaProgress.uploadedIds.length);
+			console.log(`Uploading ${remainingImages.length} remaining images...`);
+			
 			for (const imageUrl of remainingImages) {
 				try {
 					const response = await fetch(imageUrl);
@@ -217,7 +220,7 @@ class PostQueue {
 					const mediaData = await mediaResponse.json();
 					post.mediaProgress.uploadedIds.push(mediaData.id);
 					post.mediaProgress.uploadedUrls.push(mediaData.source_url);
-					this.saveToStorage();
+					await this.saveToStorage(); // Save progress after each upload
 				} catch (error) {
 					console.error('Image upload failed:', error);
 					throw new Error(`Failed to upload image: ${error.message}`);
@@ -250,7 +253,7 @@ class PostQueue {
 			post.error = error.message;
 			notices.error(`Failed to ${post.data.status === 'publish' ? 'publish post' : 'save draft'}: ${error.message}`);
 			this.updateUI(id);
-			this.saveToStorage();
+			await this.saveToStorage();
 		}
 	}
 
