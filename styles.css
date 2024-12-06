@@ -278,3 +278,68 @@ button {
 body.offline {
 	opacity: 0.8;
 }
+
+/* Add queue styles */
+.queue-container {
+	margin-top: 20px;
+	padding: 15px;
+	background: var(--surface-color);
+	border-radius: 8px;
+	border: 1px solid var(--border-color);
+}
+
+.queue-container h3 {
+	margin: 0 0 10px 0;
+	font-size: 16px;
+	color: var(--text-color);
+}
+
+.queue-list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.queue-item {
+	padding: 12px;
+	background: var(--bg-color);
+	border: 1px solid var(--border-color);
+	border-radius: 8px;
+}
+
+.queue-item-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+}
+
+.queue-item .title {
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--text-color);
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.queue-item .status {
+	font-size: 12px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	background: var(--border-color);
+	color: var(--text-color);
+	text-transform: capitalize;
+}
+
+.queue-item .error {
+	color: var(--danger-color);
+	font-size: 12px;
+	margin-top: 8px;
+	display: none;
+}
+
+.queue-item .error:not(:empty) {
+	display: block;
+}

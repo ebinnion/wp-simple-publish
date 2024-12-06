@@ -1,4 +1,317 @@
-// Add at the top of the file, outside DOMContentLoaded
+const POST_STATUS = {
+	QUEUED: 'queued',
+	UPLOADING: 'uploading',
+	COMPLETED: 'completed',
+	FAILED: 'failed'
+};
+
+class PostQueue {
+	constructor() {
+		this.posts = new Map();
+		this.loadFromStorage();
+		this.setupServiceWorker();
+	}
+
+	async setupServiceWorker() {
+		// Only try to register if we're in a secure context (https or localhost)
+		const isSecureContext = window.isSecureContext || 
+			window.location.protocol === 'https:' || 
+			window.location.hostname === 'localhost' ||
+			window.location.hostname === '127.0.0.1';
+
+		if ('serviceWorker' in navigator && isSecureContext) {
+			try {
+				const registration = await navigator.serviceWorker.register('sw.js');
+				registration.addEventListener('message', (event) => {
+					if (event.data.type === 'POST_SYNCED') {
+						this.handleSyncResult(event.data);
+					}
+				});
+			} catch (error) {
+				console.warn('ServiceWorker registration skipped:', error.message);
+			}
+		} else {
+			console.log('ServiceWorker not supported or not in a secure context');
+		}
+	}
+
+	handleSyncResult(data) {
+		const post = this.posts.get(data.id);
+		if (post) {
+			if (data.success) {
+				post.status = POST_STATUS.COMPLETED;
+				notices.success('Post published successfully!');
+				// Remove after a delay
+				setTimeout(() => {
+					this.posts.delete(data.id);
+					this.saveToStorage();
+					this.updateUI();
+				}, 3000);
+			} else {
+				post.status = POST_STATUS.FAILED;
+				post.error = data.error;
+				notices.error('Failed to publish: ' + data.error);
+			}
+			this.saveToStorage();
+			this.updateUI(data.id);
+		}
+	}
+
+	generateId() {
+		return `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+	}
+
+	async add(postData) {
+		const id = this.generateId();
+		const post = {
+			id,
+			data: postData,
+			status: POST_STATUS.QUEUED,
+			createdAt: Date.now(),
+			error: null
+		};
+
+		this.posts.set(id, post);
+		this.saveToStorage();
+		this.updateUI();
+
+		// Start processing
+		if (navigator.onLine) {
+			this.processPost(id);
+		} else {
+			// Request background sync
+			try {
+				const registration = await navigator.serviceWorker.ready;
+				await registration.sync.register('sync-posts');
+			} catch (error) {
+				console.error('Background sync registration failed:', error);
+			}
+		}
+
+		return id;
+	}
+
+	async processPost(id) {
+		const post = this.posts.get(id);
+		if (!post || post.status === POST_STATUS.COMPLETED) return;
+
+		try {
+			post.status = POST_STATUS.UPLOADING;
+			this.updateUI(id);
+
+			// Upload images first
+			const { mediaIds, mediaUrls } = await this.uploadImages(post.data.imageUrls, post.data.config);
+			
+			// Create the post
+			const postResult = await this.createPost({
+				...post.data,
+				mediaIds,
+				mediaUrls
+			});
+
+			post.status = POST_STATUS.COMPLETED;
+			post.result = postResult;
+			notices.success('Post published successfully!');
+			
+			// Remove from queue after success
+			setTimeout(() => {
+				this.posts.delete(id);
+				this.saveToStorage();
+				this.updateUI();
+			}, 3000);
+
+		} catch (error) {
+			console.error('Failed to process post:', error);
+			post.status = POST_STATUS.FAILED;
+			post.error = error.message;
+			notices.error('Failed to publish: ' + error.message);
+			this.updateUI(id);
+		}
+
+		this.saveToStorage();
+	}
+
+	async uploadImages(imageUrls, config) {
+		const mediaIds = [];
+		const mediaUrls = [];
+		
+		for (const imageUrl of imageUrls) {
+			try {
+				const response = await fetch(imageUrl);
+				const blob = await response.blob();
+				
+				const formData = new FormData();
+				formData.append('file', blob, 'image.jpg');
+
+				const mediaResponse = await fetch(`${config.url}/wp-json/wp/v2/media`, {
+					method: 'POST',
+					headers: {
+						'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`)
+					},
+					body: formData
+				});
+
+				if (!mediaResponse.ok) {
+					throw new Error('Failed to upload image');
+				}
+
+				const mediaData = await mediaResponse.json();
+				mediaIds.push(mediaData.id);
+				mediaUrls.push(mediaData.source_url);
+			} catch (error) {
+				console.error('Image upload failed:', error);
+				throw new Error('Failed to upload image');
+			}
+		}
+
+		return { mediaIds, mediaUrls };
+	}
+
+	async createPost(postData) {
+		// Format content with Gutenberg blocks
+		let blocks = [];
+		
+		// Add image/gallery block if we have images
+		if (postData.mediaIds.length > 0) {
+			if (postData.mediaIds.length === 1) {
+				blocks.push(`<!-- wp:image {"id":${postData.mediaIds[0]},"sizeSlug":"large"} -->
+<figure class="wp-block-image size-large"><img src="${postData.mediaUrls[0]}" alt="" class="wp-image-${postData.mediaIds[0]}"/></figure>
+<!-- /wp:image -->`);
+			} else {
+				blocks.push(`<!-- wp:gallery {"columns":2,"linkTo":"none","ids":[${postData.mediaIds.join(',')}]} -->
+<figure class="wp-block-gallery has-nested-images columns-2 is-cropped">
+	${postData.mediaUrls.map((url, index) => `
+	<!-- wp:image {"id":${postData.mediaIds[index]},"sizeSlug":"large","linkDestination":"none"} -->
+	<figure class="wp-block-image size-large"><img src="${url}" alt="" class="wp-image-${postData.mediaIds[index]}"/></figure>
+	<!-- /wp:image -->`).join('\n')}
+</figure>
+<!-- /wp:gallery -->`);
+			}
+		}
+
+		// Add text content as paragraphs
+		const paragraphs = postData.text.split('\n\n').filter(p => p.trim());
+		paragraphs.forEach(paragraph => {
+			blocks.push(`<!-- wp:paragraph -->
+<p>${paragraph.trim()}</p>
+<!-- /wp:paragraph -->`);
+		});
+
+		// Join blocks with newlines
+		const content = blocks.join('\n\n');
+
+		// Create post
+		const postResponse = await fetch(`${postData.config.url}/wp-json/wp/v2/posts`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'Authorization': 'Basic ' + btoa(`${postData.config.username}:${postData.config.password}`)
+			},
+			body: JSON.stringify({
+				title: postData.text.split('\n')[0] || 'New Post',
+				content: content,
+				status: 'draft',
+				featured_media: postData.mediaIds[0] || 0,
+				format: postData.format
+			})
+		});
+
+		if (!postResponse.ok) {
+			throw new Error('Failed to create post');
+		}
+
+		return postResponse.json();
+	}
+
+	loadFromStorage() {
+		try {
+			const stored = localStorage.getItem('postQueue');
+			if (stored) {
+				const parsed = JSON.parse(stored);
+				this.posts = new Map(Object.entries(parsed));
+			}
+		} catch (error) {
+			console.error('Failed to load queue:', error);
+		}
+	}
+
+	saveToStorage() {
+		try {
+			const obj = Object.fromEntries(this.posts);
+			localStorage.setItem('postQueue', JSON.stringify(obj));
+		} catch (error) {
+			console.error('Failed to save queue:', error);
+		}
+	}
+
+	updateUI(id = null) {
+		// Update queue display
+		const queueContainer = document.getElementById('queueContainer') || this.createQueueContainer();
+		
+		if (this.posts.size === 0) {
+			queueContainer.style.display = 'none';
+			return;
+		}
+
+		queueContainer.style.display = 'block';
+		const queueList = queueContainer.querySelector('.queue-list');
+		
+		if (id) {
+			// Update specific post
+			const post = this.posts.get(id);
+			let itemEl = queueList.querySelector(`[data-id="${id}"]`);
+			
+			if (!itemEl && post) {
+				itemEl = this.createQueueItem(post);
+				queueList.appendChild(itemEl);
+			} else if (itemEl && post) {
+				itemEl.querySelector('.status').textContent = post.status;
+				if (post.error) {
+					itemEl.querySelector('.error').textContent = post.error;
+				}
+			}
+		} else {
+			// Update all
+			queueList.innerHTML = '';
+			for (const post of this.posts.values()) {
+				queueList.appendChild(this.createQueueItem(post));
+			}
+		}
+	}
+
+	createQueueContainer() {
+		const container = document.createElement('div');
+		container.id = 'queueContainer';
+		container.className = 'queue-container';
+		container.innerHTML = `
+			<h3>Post Queue</h3>
+			<div class="queue-list"></div>
+		`;
+		document.querySelector('.container').appendChild(container);
+		return container;
+	}
+
+	createQueueItem(post) {
+		const item = document.createElement('div');
+		item.className = 'queue-item';
+		item.dataset.id = post.id;
+		
+		const title = post.data.text.split('\n')[0] || 'New Post';
+		item.innerHTML = `
+			<div class="queue-item-header">
+				<span class="title">${title}</span>
+				<span class="status">${post.status}</span>
+			</div>
+			<div class="error">${post.error || ''}</div>
+		`;
+		
+		return item;
+	}
+}
+
+// Initialize queue
+const postQueue = new PostQueue();
+
 const publishQueue = {
 	queue: [],
 	
@@ -161,31 +474,28 @@ document.addEventListener('DOMContentLoaded', () => {
 		if (text || images.length > 0) {
 			try {
 				postButton.disabled = true;
-				postButton.textContent = 'Publishing...';
 				
-				if (!navigator.onLine) {
-					publishQueue.add({
-						text,
-						imageUrls: Array.from(images).map(img => img.src),
-						config: wpConfig,
-						format
-					});
-					notices.info('You are offline. Post will be published when connection is restored.');
-				} else {
-					await publishToWordPress(text, Array.from(images).map(img => img.src), wpConfig, format);
-					notices.success('Post published successfully!');
-				}
+				const postData = {
+					text,
+					imageUrls: Array.from(images).map(img => img.src),
+					config: wpConfig,
+					format
+				};
+
+				// Add to queue
+				await postQueue.add(postData);
 				
 				// Clear form
 				document.querySelector('textarea').value = '';
 				imagePreview.innerHTML = '';
 				imageInput.value = '';
 				formatSelector.value = 'standard';
+				
+				notices.success('Post added to queue!');
 			} catch (error) {
-				notices.error('Failed to publish: ' + error.message);
+				notices.error('Failed to queue post: ' + error.message);
 			} finally {
 				postButton.disabled = false;
-				postButton.textContent = 'Post';
 			}
 		}
 	});
@@ -354,11 +664,4 @@ async function publishToWordPress(text, imageUrls, config, format) {
 		console.error('Publishing error:', error);
 		throw error;
 	}
-}
-
-// Register service worker for PWA
-if ('serviceWorker' in navigator) {
-	navigator.serviceWorker.register('sw.js')
-		.then(registration => console.log('ServiceWorker registered'))
-		.catch(error => console.log('ServiceWorker error:', error));
 }
