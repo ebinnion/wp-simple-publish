@@ -210,7 +210,7 @@ class PostQueue {
 			body: JSON.stringify({
 				title: postData.text.split('\n')[0] || 'New Post',
 				content: content,
-				status: 'draft',
+				status: postData.status || 'draft',
 				featured_media: postData.mediaIds[0] || 0,
 				format: postData.format
 			})
@@ -390,7 +390,9 @@ const notices = {
 document.addEventListener('DOMContentLoaded', () => {
 	const imageInput = document.getElementById('imageInput');
 	const imagePreview = document.getElementById('imagePreview');
-	const postButton = document.getElementById('postButton');
+	const publishButton = document.getElementById('publishButton');
+	const draftButton = document.getElementById('draftButton');
+	const settingsButton = document.getElementById('settingsButton');
 
 	// Add credential fields
 	const wpConfig = {
@@ -399,25 +401,11 @@ document.addEventListener('DOMContentLoaded', () => {
 		password: localStorage.getItem('wp_password') || ''
 	};
 
-	// Create settings UI
-	const settingsBtn = document.createElement('button');
-	settingsBtn.textContent = '⚙️';
-	settingsBtn.className = 'settings-btn';
-
-	// Create button container
-	const buttonContainer = document.createElement('div');
-	buttonContainer.className = 'button-container';
-
-	// Move the post button into the container and add settings button
-	postButton.parentNode.insertBefore(buttonContainer, postButton);
-	buttonContainer.appendChild(postButton);
-	buttonContainer.appendChild(settingsBtn);
-
 	// Create settings modal
 	const settingsModal = createSettingsModal(wpConfig);
 	document.body.appendChild(settingsModal);
 
-	settingsBtn.addEventListener('click', () => {
+	settingsButton.addEventListener('click', () => {
 		settingsModal.style.display = 'flex';
 	});
 
@@ -456,30 +444,25 @@ document.addEventListener('DOMContentLoaded', () => {
 	// Insert after textarea
 	document.querySelector('textarea').after(formatSelector);
 
-	// Load and process queue when app starts
-	publishQueue.load();
-	if (navigator.onLine) {
-		publishQueue.process();
-	}
-
 	// Initialize notices
 	notices.init();
 
-	// Modify the post button handler
-	postButton.addEventListener('click', async () => {
+	async function handlePost(status = 'publish') {
 		const text = document.querySelector('textarea').value;
 		const images = imagePreview.querySelectorAll('img');
 		const format = document.querySelector('#post-format').value;
 		
 		if (text || images.length > 0) {
 			try {
-				postButton.disabled = true;
+				publishButton.disabled = true;
+				draftButton.disabled = true;
 				
 				const postData = {
 					text,
 					imageUrls: Array.from(images).map(img => img.src),
 					config: wpConfig,
-					format
+					format,
+					status
 				};
 
 				// Add to queue
@@ -491,14 +474,19 @@ document.addEventListener('DOMContentLoaded', () => {
 				imageInput.value = '';
 				formatSelector.value = 'standard';
 				
-				notices.success('Post added to queue!');
+				notices.success(status === 'publish' ? 'Post added to queue!' : 'Draft saved!');
 			} catch (error) {
-				notices.error('Failed to queue post: ' + error.message);
+				notices.error(`Failed to ${status === 'publish' ? 'queue post' : 'save draft'}: ${error.message}`);
 			} finally {
-				postButton.disabled = false;
+				publishButton.disabled = false;
+				draftButton.disabled = false;
 			}
 		}
-	});
+	}
+
+	// Modify the button handlers
+	publishButton.addEventListener('click', () => handlePost('publish'));
+	draftButton.addEventListener('click', () => handlePost('draft'));
 
 	// Add online/offline handlers
 	window.addEventListener('online', () => {

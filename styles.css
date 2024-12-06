@@ -118,7 +118,7 @@ button {
 	opacity: 0.5;
 	padding: 16px;
 	font-size: 24px;
-	margin-left: 8px;
+	margin-left: 0;
 	min-width: auto;
 	border: none;
 }
@@ -220,9 +220,23 @@ button {
 	gap: 8px;
 }
 
-#postButton {
+#publishButton, #draftButton {
 	flex: 1;
 	margin: 0;
+}
+
+#publishButton {
+	background: var(--primary-color);
+}
+
+#draftButton {
+	background: var(--surface-color);
+	color: var(--text-color);
+	border: 1px solid var(--border-color);
+}
+
+#draftButton:hover {
+	background: var(--border-color);
 }
 
 /* Animations */
