@@ -62,7 +62,6 @@ textarea, input, select, #post-format {
 	color: var(--text-color);
 	border-radius: 8px;
 	padding: 12px;
-	margin: 8px 0;
 	outline: none;
 	font-size: 16px;
 	border: 1px solid var(--border-color);
@@ -86,16 +85,14 @@ button {
 	touch-action: manipulation;
 }
 
-/* Image handling */
-#imageInput {
-	margin: 8px 0;
-}
-
 #imagePreview {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 	gap: 12px;
-	margin: 8px 0;
+}
+
+#imagePreview:empty {
+	display: none;
 }
 
 #imagePreview img {
@@ -221,7 +218,6 @@ button {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	margin-top: 8px;
 }
 
 #postButton {
