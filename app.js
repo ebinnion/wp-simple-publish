@@ -700,6 +700,13 @@ function createSettingsModal(config) {
 				<button id="saveSettings">Save</button>
 				<button id="cancelSettings">Cancel</button>
 			</div>
+			<div class="modal-danger-zone">
+				<h4>Danger Zone</h4>
+				<div class="danger-buttons">
+					<button id="clearSettings" class="danger">Clear Settings</button>
+					<button id="clearQueue" class="danger">Clear Queue</button>
+				</div>
+			</div>
 		</div>
 	`;
 
@@ -718,7 +725,40 @@ function createSettingsModal(config) {
 	});
 
 	modal.querySelector('#cancelSettings').addEventListener('click', () => {
-			modal.style.display = 'none';
+		modal.style.display = 'none';
+	});
+
+	modal.querySelector('#clearSettings').addEventListener('click', () => {
+		if (confirm('Are you sure you want to clear all WordPress settings? This will remove your saved site URL, username, and password.')) {
+			localStorage.removeItem('wp_url');
+			localStorage.removeItem('wp_username');
+			localStorage.removeItem('wp_password');
+			
+			// Clear the config object
+			config.url = '';
+			config.username = '';
+			config.password = '';
+			
+			// Update input fields
+			modal.querySelector('#wp_url').value = '';
+			modal.querySelector('#wp_username').value = '';
+			modal.querySelector('#wp_password').value = '';
+			
+			notices.success('Settings cleared successfully');
+		}
+	});
+
+	modal.querySelector('#clearQueue').addEventListener('click', () => {
+		if (confirm('Are you sure you want to clear the queue? This will remove all pending posts and uploads.')) {
+			postQueue.posts.clear();
+			const transaction = postQueue.db.transaction(postQueue.storeName, 'readwrite');
+			const store = transaction.objectStore(postQueue.storeName);
+			store.clear().onsuccess = () => {
+				postQueue.updateUI();
+				notices.success('Queue cleared successfully');
+				modal.style.display = 'none';
+			};
+		}
 	});
 
 	return modal;

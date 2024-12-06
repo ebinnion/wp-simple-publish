@@ -156,6 +156,12 @@ button {
 	margin-top: 20px;
 }
 
+.modal-buttons #cancelSettings {
+	background: var(--surface-color);
+	color: var(--text-color);
+	border: 1px solid var(--border-color);
+}
+
 /* Notices */
 .notices {
 	position: fixed;
@@ -402,4 +408,32 @@ body.offline {
 
 .modal-content input {
 	margin-bottom: 16px;
+}
+
+.modal-danger-zone {
+	margin-top: 20px;
+	padding-top: 20px;
+	border-top: 1px solid var(--border-color);
+}
+
+.modal-danger-zone h4 {
+	color: var(--danger-color);
+	margin: 0 0 10px 0;
+	font-size: 14px;
+}
+
+.danger-buttons {
+	display: flex;
+	gap: 10px;
+}
+
+button.danger {
+	background: var(--danger-color);
+	color: white;
+	opacity: 0.8;
+	padding: 16px 14px;
+}
+
+button.danger:hover {
+	opacity: 1;
 }
