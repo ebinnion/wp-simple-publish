@@ -10,10 +10,35 @@ class PostQueue {
 		this.posts = new Map();
 		this.dbName = 'postQueueDB';
 		this.storeName = 'posts';
-		this.setupDB().then(() => {
-			this.loadFromStorage();
-			this.setupServiceWorker();
-		});
+		this.ready = false;
+		this.initPromise = this.init();
+	}
+
+	async init() {
+		try {
+			await this.setupDB();
+			await this.loadFromStorage();
+			await this.setupServiceWorker();
+			this.ready = true;
+			
+			// Process any non-completed items if we're online
+			if (navigator.onLine) {
+				for (const [id, post] of this.posts.entries()) {
+					if (post.status !== POST_STATUS.COMPLETED) {
+						// Reset status for any previously uploading items
+						if (post.status === POST_STATUS.UPLOADING) {
+							post.status = POST_STATUS.QUEUED;
+							await this.saveToStorage();
+						}
+						await this.processPost(id);
+					}
+				}
+			}
+		} catch (error) {
+			console.error('Failed to initialize queue:', error);
+			this.ready = false;
+			throw error;
+		}
 	}
 
 	async setupDB() {
@@ -85,24 +110,31 @@ class PostQueue {
 	}
 
 	async add(postData) {
+		// Wait for initialization to complete
+		if (!this.ready) {
+			await this.initPromise;
+		}
+		
 		const id = this.generateId();
 		const post = {
 			id,
 			data: postData,
 			status: POST_STATUS.QUEUED,
 			createdAt: Date.now(),
-			error: null
+			error: null,
+			mediaProgress: {
+				uploadedIds: [],
+				uploadedUrls: []
+			}
 		};
 
 		this.posts.set(id, post);
-		this.saveToStorage();
+		await this.saveToStorage();
 		this.updateUI();
 
-		// Start processing
 		if (navigator.onLine) {
-			this.processPost(id);
+			await this.processPost(id);
 		} else {
-			// Request background sync
 			try {
 				const registration = await navigator.serviceWorker.ready;
 				await registration.sync.register('sync-posts');
@@ -315,30 +347,33 @@ class PostQueue {
 	}
 
 	async loadFromStorage() {
-		try {
-			const transaction = this.db.transaction(this.storeName, 'readonly');
-			const store = transaction.objectStore(this.storeName);
-			const request = store.getAll();
+		return new Promise((resolve, reject) => {
+			try {
+				const transaction = this.db.transaction(this.storeName, 'readonly');
+				const store = transaction.objectStore(this.storeName);
+				const request = store.getAll();
 
-			request.onsuccess = () => {
-				const posts = request.result;
-				this.posts = new Map(posts.map(post => [post.id, post]));
-				this.updateUI();
-				
-				// Process any queued items if we're online
-				if (navigator.onLine) {
-					setTimeout(() => {
-						for (const [id, post] of this.posts.entries()) {
-							if (post.status === POST_STATUS.QUEUED) {
-								this.processPost(id);
-							}
-						}
-					}, 0);
-				}
-			};
-		} catch (error) {
-			console.error('Failed to load queue:', error);
-		}
+				request.onerror = () => {
+					console.error('Failed to load from storage:', request.error);
+					reject(request.error);
+				};
+
+				request.onsuccess = () => {
+					const posts = request.result;
+					this.posts = new Map(posts.map(post => [post.id, post]));
+					this.updateUI();
+					resolve();
+				};
+
+				transaction.onerror = () => {
+					console.error('Transaction failed:', transaction.error);
+					reject(transaction.error);
+				};
+			} catch (error) {
+				console.error('Failed to start load transaction:', error);
+				reject(error);
+			}
+		});
 	}
 
 	async saveToStorage() {
