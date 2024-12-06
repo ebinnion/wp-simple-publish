@@ -119,21 +119,90 @@ class PostQueue {
 		if (!post || post.status === POST_STATUS.COMPLETED) return;
 
 		try {
-			post.status = POST_STATUS.UPLOADING;
-			this.updateUI(id);
+			// Validate site URL
+			if (!post.data.config.url) {
+				throw new Error('WordPress site URL not configured. Please check your settings.');
+			}
 
-			// Upload images first
-			const { mediaIds, mediaUrls } = await this.uploadImages(post.data.imageUrls, post.data.config);
-			
-			// Create the post
-			const postResult = await this.createPost({
+			try {
+				const url = new URL(post.data.config.url);
+				if (!url.protocol.startsWith('http')) {
+					throw new Error('WordPress site URL must start with http:// or https://');
+				}
+				post.data.config.url = url.origin + url.pathname.replace(/\/$/, '');
+			} catch (error) {
+				throw new Error('Invalid WordPress site URL. Please check your settings.');
+			}
+
+			post.status = POST_STATUS.UPLOADING;
+			post.mediaProgress = post.mediaProgress || {
+				uploadedIds: [],
+				uploadedUrls: []
+			};
+			this.updateUI(id);
+			this.saveToStorage();
+
+			// First create a draft post
+			console.log('Creating initial draft post...');
+			const draftPost = await this.createPost({
 				...post.data,
-				mediaIds,
-				mediaUrls
+				status: 'draft',
+				content: 'Uploading media...' // Temporary content
+			});
+
+			console.log('Draft post created:', draftPost.id);
+			post.draftId = draftPost.id;
+			this.saveToStorage();
+
+			// Upload images and attach them to the draft
+			const remainingImages = post.data.imageUrls.slice(post.mediaProgress.uploadedIds.length);
+			for (const imageUrl of remainingImages) {
+				try {
+					const response = await fetch(imageUrl);
+					const blob = await response.blob();
+					
+					const formData = new FormData();
+					formData.append('file', blob, 'image.jpg');
+					formData.append('post', post.draftId); // Attach to our draft post
+
+					const mediaEndpoint = new URL('/wp-json/wp/v2/media', post.data.config.url).toString();
+					console.log('Uploading media to:', mediaEndpoint);
+
+					const mediaResponse = await fetch(mediaEndpoint, {
+						method: 'POST',
+						headers: {
+							'Authorization': 'Basic ' + btoa(`${post.data.config.username}:${post.data.config.password}`)
+						},
+						body: formData
+					});
+
+					if (!mediaResponse.ok) {
+						const errorText = await mediaResponse.text();
+						console.error('Media upload failed:', mediaResponse.status, errorText);
+						throw new Error(`Failed to upload image (HTTP ${mediaResponse.status}): ${errorText}`);
+					}
+
+					const mediaData = await mediaResponse.json();
+					post.mediaProgress.uploadedIds.push(mediaData.id);
+					post.mediaProgress.uploadedUrls.push(mediaData.source_url);
+					this.saveToStorage();
+				} catch (error) {
+					console.error('Image upload failed:', error);
+					throw new Error(`Failed to upload image: ${error.message}`);
+				}
+			}
+			
+			// Update the draft with content and final status
+			console.log('Updating post with content and media...');
+			const finalPost = await this.updatePost({
+				...post.data,
+				postId: post.draftId,
+				mediaIds: post.mediaProgress.uploadedIds,
+				mediaUrls: post.mediaProgress.uploadedUrls
 			});
 
 			post.status = POST_STATUS.COMPLETED;
-			post.result = postResult;
+			post.result = finalPost;
 			notices.success(post.data.status === 'publish' ? 'Post published successfully!' : 'Draft saved successfully!');
 			
 			// Remove from queue after success
@@ -149,48 +218,43 @@ class PostQueue {
 			post.error = error.message;
 			notices.error(`Failed to ${post.data.status === 'publish' ? 'publish post' : 'save draft'}: ${error.message}`);
 			this.updateUI(id);
+			this.saveToStorage();
 		}
-
-		this.saveToStorage();
-	}
-
-	async uploadImages(imageUrls, config) {
-		const mediaIds = [];
-		const mediaUrls = [];
-		
-		for (const imageUrl of imageUrls) {
-			try {
-				const response = await fetch(imageUrl);
-				const blob = await response.blob();
-				
-				const formData = new FormData();
-				formData.append('file', blob, 'image.jpg');
-
-				const mediaResponse = await fetch(`${config.url}/wp-json/wp/v2/media`, {
-					method: 'POST',
-					headers: {
-						'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`)
-					},
-					body: formData
-				});
-
-				if (!mediaResponse.ok) {
-					throw new Error('Failed to upload image');
-				}
-
-				const mediaData = await mediaResponse.json();
-				mediaIds.push(mediaData.id);
-				mediaUrls.push(mediaData.source_url);
-			} catch (error) {
-				console.error('Image upload failed:', error);
-				throw new Error('Failed to upload image');
-			}
-		}
-
-		return { mediaIds, mediaUrls };
 	}
 
 	async createPost(postData) {
+		// Validate site URL
+		if (!postData.config.url || !postData.config.url.startsWith('http')) {
+			throw new Error('Invalid WordPress site URL. Please check your settings.');
+		}
+
+		const endpoint = new URL('/wp-json/wp/v2/posts', postData.config.url).toString();
+		console.log('Creating post at:', endpoint);
+
+		const postResponse = await fetch(endpoint, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'Authorization': 'Basic ' + btoa(`${postData.config.username}:${postData.config.password}`)
+			},
+			body: JSON.stringify({
+				title: postData.text.split('\n')[0] || 'New Post',
+				content: postData.content || postData.text,
+				status: postData.status,
+				format: postData.format
+			})
+		});
+
+		if (!postResponse.ok) {
+			const errorText = await postResponse.text();
+			console.error('Post creation failed:', postResponse.status, errorText);
+			throw new Error(`Failed to create post (HTTP ${postResponse.status})`);
+		}
+
+		return postResponse.json();
+	}
+
+	async updatePost(postData) {
 		// Format content with Gutenberg blocks
 		let blocks = [];
 		
@@ -223,8 +287,10 @@ class PostQueue {
 		// Join blocks with newlines
 		const content = blocks.join('\n\n');
 
-		// Create post
-		const postResponse = await fetch(`${postData.config.url}/wp-json/wp/v2/posts`, {
+		const endpoint = new URL(`/wp-json/wp/v2/posts/${postData.postId}`, postData.config.url).toString();
+		console.log('Updating post at:', endpoint);
+
+		const postResponse = await fetch(endpoint, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -233,14 +299,16 @@ class PostQueue {
 			body: JSON.stringify({
 				title: postData.text.split('\n')[0] || 'New Post',
 				content: content,
-				status: postData.status || 'draft',
+				status: postData.status,
 				featured_media: postData.mediaIds[0] || 0,
 				format: postData.format
 			})
 		});
 
 		if (!postResponse.ok) {
-			throw new Error('Failed to create post');
+			const errorText = await postResponse.text();
+			console.error('Post update failed:', postResponse.status, errorText);
+			throw new Error(`Failed to update post (HTTP ${postResponse.status})`);
 		}
 
 		return postResponse.json();
