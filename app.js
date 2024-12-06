@@ -111,7 +111,7 @@ class PostQueue {
 
 			post.status = POST_STATUS.COMPLETED;
 			post.result = postResult;
-			notices.success('Post published successfully!');
+			notices.success(post.data.status === 'publish' ? 'Post published successfully!' : 'Draft saved successfully!');
 			
 			// Remove from queue after success
 			setTimeout(() => {
@@ -124,7 +124,7 @@ class PostQueue {
 			console.error('Failed to process post:', error);
 			post.status = POST_STATUS.FAILED;
 			post.error = error.message;
-			notices.error('Failed to publish: ' + error.message);
+			notices.error(`Failed to ${post.data.status === 'publish' ? 'publish post' : 'save draft'}: ${error.message}`);
 			this.updateUI(id);
 		}
 
@@ -312,39 +312,6 @@ class PostQueue {
 // Initialize queue
 const postQueue = new PostQueue();
 
-const publishQueue = {
-	queue: [],
-	
-	add: function(data) {
-		this.queue.push(data);
-		localStorage.setItem('publishQueue', JSON.stringify(this.queue));
-	},
-	
-	remove: function(index) {
-		this.queue.splice(index, 1);
-		localStorage.setItem('publishQueue', JSON.stringify(this.queue));
-	},
-	
-	load: function() {
-		this.queue = JSON.parse(localStorage.getItem('publishQueue') || '[]');
-	},
-	
-	process: async function() {
-		if (!navigator.onLine) return;
-		
-		for (let i = this.queue.length - 1; i >= 0; i--) {
-			const item = this.queue[i];
-			try {
-				await publishToWordPress(item.text, item.imageUrls, item.config, item.format);
-				this.remove(i);
-				notices.success('Queued post has been published!');
-			} catch (error) {
-				console.error('Failed to publish queued item:', error);
-			}
-		}
-	}
-};
-
 const notices = {
 	container: null,
 	
@@ -465,18 +432,27 @@ document.addEventListener('DOMContentLoaded', () => {
 					status
 				};
 
-				// Add to queue
-				await postQueue.add(postData);
-				
-				// Clear form
+				// Clear form immediately after capturing the data
 				document.querySelector('textarea').value = '';
 				imagePreview.innerHTML = '';
 				imageInput.value = '';
 				formatSelector.value = 'standard';
+
+				if (!navigator.onLine) {
+					// Add to queue if offline
+					await postQueue.add(postData);
+					notices.info(`You're offline. ${status === 'publish' ? 'Post' : 'Draft'} will be ${status === 'publish' ? 'published' : 'saved'} when connection is restored.`);
+				} else {
+					// Process immediately if online
+					const id = await postQueue.add(postData);
+				}
 				
-				notices.success(status === 'publish' ? 'Post added to queue!' : 'Draft saved!');
 			} catch (error) {
-				notices.error(`Failed to ${status === 'publish' ? 'queue post' : 'save draft'}: ${error.message}`);
+				// If there was an error, restore the form data
+				document.querySelector('textarea').value = text;
+				imagePreview.innerHTML = Array.from(images).map(img => img.outerHTML).join('');
+				formatSelector.value = format;
+				notices.error(`Failed to ${status === 'publish' ? 'publish post' : 'save draft'}: ${error.message}`);
 			} finally {
 				publishButton.disabled = false;
 				draftButton.disabled = false;
@@ -491,7 +467,6 @@ document.addEventListener('DOMContentLoaded', () => {
 	// Add online/offline handlers
 	window.addEventListener('online', () => {
 		document.body.classList.remove('offline');
-		publishQueue.process();
 	});
 
 	window.addEventListener('offline', () => {
