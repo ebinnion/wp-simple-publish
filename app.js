@@ -687,9 +687,23 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function createSettingsModal(config) {
-	const modal = document.createElement('div');
+	// Check if modal already exists
+	let modal = document.querySelector('.settings-modal');
+	if (modal) {
+		// Update existing modal content instead of creating new one
+		updateSettingsModalContent(modal, config);
+		return modal;
+	}
+
+	// Create new modal if it doesn't exist
+	modal = document.createElement('div');
 	modal.className = 'settings-modal';
-	
+	updateSettingsModalContent(modal, config);
+	document.body.appendChild(modal);
+	return modal;
+}
+
+function updateSettingsModalContent(modal, config) {
 	// Check if we have any settings saved
 	const hasSettings = !!(config.url || config.username || config.password);
 	
@@ -722,43 +736,6 @@ function createSettingsModal(config) {
 		</div>
 	`;
 
-	// Add styles for danger zone if not already added
-	if (!document.querySelector('#danger-zone-styles')) {
-		const style = document.createElement('style');
-		style.id = 'danger-zone-styles';
-		style.textContent = `
-			.modal-danger-zone {
-				margin-top: 20px;
-				padding-top: 20px;
-				border-top: 1px solid var(--border-color);
-			}
-
-			.modal-danger-zone h4 {
-				color: var(--danger-color);
-				margin: 0 0 10px 0;
-				font-size: 14px;
-			}
-
-			.danger-buttons {
-				display: flex;
-				gap: 10px;
-			}
-
-			button.danger {
-				background: var(--danger-color);
-				color: white;
-				opacity: 0.8;
-				font-size: 13px;
-				padding: 8px 12px;
-			}
-
-			button.danger:hover {
-				opacity: 1;
-			}
-		`;
-		document.head.appendChild(style);
-	}
-
 	// Add save and cancel handlers
 	modal.querySelector('#saveSettings')?.addEventListener('click', () => {
 		config.url = modal.querySelector('#wp_url').value;
@@ -773,9 +750,8 @@ function createSettingsModal(config) {
 		notices.success('Settings saved successfully');
 		modal.style.display = 'none';
 		
-		// Refresh the modal to show/hide clear settings button
-		document.body.removeChild(modal);
-		document.body.appendChild(createSettingsModal(config));
+		// Update modal content instead of recreating
+		updateSettingsModalContent(modal, config);
 	});
 
 	modal.querySelector('#cancelSettings')?.addEventListener('click', () => {
@@ -794,16 +770,10 @@ function createSettingsModal(config) {
 			config.username = '';
 			config.password = '';
 			
-			// Update input fields
-			modal.querySelector('#wp_url').value = '';
-			modal.querySelector('#wp_username').value = '';
-			modal.querySelector('#wp_password').value = '';
-			
 			notices.success('Settings cleared successfully');
 			
-			// Refresh the modal to hide the clear settings button
-			document.body.removeChild(modal);
-			document.body.appendChild(createSettingsModal(config));
+			// Update modal content instead of recreating
+			updateSettingsModalContent(modal, config);
 		}
 	});
 
@@ -818,14 +788,11 @@ function createSettingsModal(config) {
 				notices.success('Queue cleared successfully');
 				modal.style.display = 'none';
 				
-				// Refresh the modal to hide the clear queue button
-				document.body.removeChild(modal);
-				document.body.appendChild(createSettingsModal(config));
+				// Update modal content instead of recreating
+				updateSettingsModalContent(modal, config);
 			};
 		}
 	});
-
-	return modal;
 }
 
 async function publishToWordPress(text, imageUrls, config, format) {
