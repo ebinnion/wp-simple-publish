@@ -1,4 +1,4 @@
-const CACHE_NAME = 'post-app-52b6b23';
+const CACHE_NAME = 'post-app-c45ced4';
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
