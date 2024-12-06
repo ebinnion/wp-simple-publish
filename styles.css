@@ -326,6 +326,7 @@ body.offline {
 	justify-content: space-between;
 	align-items: center;
 	gap: 8px;
+	margin-bottom: 8px;
 }
 
 .queue-item .title {
@@ -356,6 +357,47 @@ body.offline {
 
 .queue-item .error:not(:empty) {
 	display: block;
+}
+
+/* Upload progress styles */
+.upload-progress {
+	margin-top: 8px;
+}
+
+.progress-bar {
+	height: 4px;
+	background: var(--border-color);
+	border-radius: 2px;
+	overflow: hidden;
+	margin-bottom: 4px;
+}
+
+.progress-fill {
+	height: 100%;
+	background: var(--primary-color);
+	transition: width 0.3s ease;
+}
+
+.progress-text {
+	font-size: 12px;
+	color: var(--text-color);
+	opacity: 0.8;
+}
+
+/* Status colors */
+.queue-item .status.uploading {
+	background: var(--primary-color);
+	color: white;
+}
+
+.queue-item .status.completed {
+	background: var(--success-color);
+	color: white;
+}
+
+.queue-item .status.failed {
+	background: var(--danger-color);
+	color: white;
 }
 
 .modal-content input {

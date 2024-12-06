@@ -165,19 +165,21 @@ class PostQueue {
 			post.status = POST_STATUS.UPLOADING;
 			post.mediaProgress = post.mediaProgress || {
 				uploadedIds: [],
-				uploadedUrls: []
+				uploadedUrls: [],
+				currentFile: 0,
+				currentFileProgress: 0
 			};
-			post.draftId = post.draftId || null; // Track draft ID
+			post.draftId = post.draftId || null;
 			this.updateUI(id);
-			this.saveToStorage();
+			await this.saveToStorage();
 
-			// Create draft post only if we don't have one
+			// Create or resume draft post
 			if (!post.draftId) {
 				console.log('Creating initial draft post...');
 				const draftPost = await this.createPost({
 					...post.data,
 					status: 'draft',
-					content: 'Uploading media...' // Temporary content
+					content: 'Uploading media...'
 				});
 
 				console.log('Draft post created:', draftPost.id);
@@ -187,40 +189,32 @@ class PostQueue {
 				console.log('Resuming with existing draft:', post.draftId);
 			}
 
-			// Upload remaining images
+			// Upload remaining images with progress tracking
 			const remainingImages = post.data.imageUrls.slice(post.mediaProgress.uploadedIds.length);
 			console.log(`Uploading ${remainingImages.length} remaining images...`);
 			
-			for (const imageUrl of remainingImages) {
+			for (const [index, imageUrl] of remainingImages.entries()) {
 				try {
+					post.mediaProgress.currentFile = post.mediaProgress.uploadedIds.length;
+					post.mediaProgress.currentFileProgress = 0;
+					this.updateUI(id);
+
 					const response = await fetch(imageUrl);
 					const blob = await response.blob();
 					
 					const formData = new FormData();
 					formData.append('file', blob, 'image.jpg');
-					formData.append('post', post.draftId); // Attach to our draft post
+					formData.append('post', post.draftId);
 
 					const mediaEndpoint = new URL('/wp-json/wp/v2/media', post.data.config.url).toString();
-					console.log('Uploading media to:', mediaEndpoint);
+					console.log(`Uploading media ${index + 1} of ${remainingImages.length} to:`, mediaEndpoint);
 
-					const mediaResponse = await fetch(mediaEndpoint, {
-						method: 'POST',
-						headers: {
-							'Authorization': 'Basic ' + btoa(`${post.data.config.username}:${post.data.config.password}`)
-						},
-						body: formData
-					});
-
-					if (!mediaResponse.ok) {
-						const errorText = await mediaResponse.text();
-						console.error('Media upload failed:', mediaResponse.status, errorText);
-						throw new Error(`Failed to upload image (HTTP ${mediaResponse.status}): ${errorText}`);
-					}
-
-					const mediaData = await mediaResponse.json();
+					const mediaData = await this.uploadMedia(mediaEndpoint, post.data.config, formData);
 					post.mediaProgress.uploadedIds.push(mediaData.id);
 					post.mediaProgress.uploadedUrls.push(mediaData.source_url);
-					await this.saveToStorage(); // Save progress after each upload
+					post.mediaProgress.currentFileProgress = 100;
+					await this.saveToStorage();
+					this.updateUI(id);
 				} catch (error) {
 					console.error('Image upload failed:', error);
 					throw new Error(`Failed to upload image: ${error.message}`);
@@ -397,67 +391,133 @@ class PostQueue {
 	}
 
 	updateUI(id = null) {
-		// Update queue display
-		const queueContainer = document.getElementById('queueContainer') || this.createQueueContainer();
+		const queueContainer = document.querySelector('.queue-container') || this.createQueueContainer();
+		const queueList = queueContainer.querySelector('.queue-list');
 		
 		if (this.posts.size === 0) {
 			queueContainer.style.display = 'none';
 			return;
 		}
-
-		queueContainer.style.display = 'block';
-		const queueList = queueContainer.querySelector('.queue-list');
 		
-		if (id) {
-			// Update specific post
-			const post = this.posts.get(id);
-			let itemEl = queueList.querySelector(`[data-id="${id}"]`);
+		queueContainer.style.display = 'block';
+		queueList.innerHTML = '';
+		
+		for (const [postId, post] of this.posts.entries()) {
+			const item = document.createElement('div');
+			item.className = 'queue-item';
 			
-			if (!itemEl && post) {
-				itemEl = this.createQueueItem(post);
-				queueList.appendChild(itemEl);
-			} else if (itemEl && post) {
-				itemEl.querySelector('.status').textContent = post.status;
-				if (post.error) {
-					itemEl.querySelector('.error').textContent = post.error;
-				}
+			const header = document.createElement('div');
+			header.className = 'queue-item-header';
+			
+			const title = document.createElement('div');
+			title.className = 'title';
+			title.textContent = post.data.text.split('\n')[0] || 'New Post';
+			
+			const status = document.createElement('div');
+			status.className = 'status';
+			status.textContent = post.status;
+			
+			header.appendChild(title);
+			header.appendChild(status);
+			item.appendChild(header);
+			
+			// Add progress indicator only during media uploads
+			if (post.status === POST_STATUS.UPLOADING && 
+				post.data.imageUrls.length > 0 && 
+				post.mediaProgress.uploadedIds.length < post.data.imageUrls.length) {
+				
+				const progress = document.createElement('div');
+				progress.className = 'upload-progress';
+				
+				const uploadedCount = post.mediaProgress?.uploadedIds?.length || 0;
+				const totalCount = post.data.imageUrls.length;
+				const currentFileProgress = post.mediaProgress?.currentFileProgress || 0;
+				
+				// Calculate total progress including current file
+				const completedProgress = (uploadedCount / totalCount) * 100;
+				const currentFileContribution = (currentFileProgress / 100) * (1 / totalCount) * 100;
+				const totalProgress = Math.min(Math.round(completedProgress + currentFileContribution), 100);
+				
+				progress.innerHTML = `
+					<div class="progress-bar">
+						<div class="progress-fill" style="width: ${totalProgress}%"></div>
+					</div>
+					<div class="progress-text">
+						Uploading image ${uploadedCount + 1} of ${totalCount} (${totalProgress}%)
+					</div>
+				`;
+				item.appendChild(progress);
+			} else if (post.status === POST_STATUS.UPLOADING) {
+				// Show a different message when updating the post
+				const progress = document.createElement('div');
+				progress.className = 'upload-progress';
+				progress.innerHTML = `
+					<div class="progress-text">
+						Updating post...
+					</div>
+				`;
+				item.appendChild(progress);
 			}
-		} else {
-			// Update all
-			queueList.innerHTML = '';
-			for (const post of this.posts.values()) {
-				queueList.appendChild(this.createQueueItem(post));
+			
+			if (post.error) {
+				const error = document.createElement('div');
+				error.className = 'error';
+				error.textContent = post.error;
+				item.appendChild(error);
 			}
+			
+			queueList.appendChild(item);
 		}
 	}
 
 	createQueueContainer() {
 		const container = document.createElement('div');
-		container.id = 'queueContainer';
 		container.className = 'queue-container';
 		container.innerHTML = `
-			<h3>Post Queue</h3>
+			<h3>Upload Queue</h3>
 			<div class="queue-list"></div>
 		`;
 		document.querySelector('.container').appendChild(container);
 		return container;
 	}
 
-	createQueueItem(post) {
-		const item = document.createElement('div');
-		item.className = 'queue-item';
-		item.dataset.id = post.id;
-		
-		const title = post.data.text.split('\n')[0] || 'New Post';
-		item.innerHTML = `
-			<div class="queue-item-header">
-				<span class="title">${title}</span>
-				<span class="status">${post.status}</span>
-			</div>
-			<div class="error">${post.error || ''}</div>
-		`;
-		
-		return item;
+	async uploadMedia(url, config, formData) {
+		return new Promise((resolve, reject) => {
+			const xhr = new XMLHttpRequest();
+			
+			xhr.upload.addEventListener('progress', (event) => {
+				if (event.lengthComputable) {
+					const progress = (event.loaded / event.total) * 100;
+					this.currentFileProgress = progress;
+					this.updateUI(); // Update UI with current file progress
+				}
+			});
+			
+			xhr.addEventListener('load', () => {
+				if (xhr.status >= 200 && xhr.status < 300) {
+					try {
+						const response = JSON.parse(xhr.responseText);
+						resolve(response);
+					} catch (error) {
+						reject(new Error('Invalid response format'));
+					}
+				} else {
+					reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText}`));
+				}
+			});
+			
+			xhr.addEventListener('error', () => {
+				reject(new Error('Network error during upload'));
+			});
+			
+			xhr.addEventListener('abort', () => {
+				reject(new Error('Upload aborted'));
+			});
+			
+			xhr.open('POST', url);
+			xhr.setRequestHeader('Authorization', 'Basic ' + btoa(`${config.username}:${config.password}`));
+			xhr.send(formData);
+		});
 	}
 }
 
