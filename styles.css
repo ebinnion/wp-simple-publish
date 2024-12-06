@@ -357,3 +357,7 @@ body.offline {
 .queue-item .error:not(:empty) {
 	display: block;
 }
+
+.modal-content input {
+	margin-bottom: 16px;
+}
