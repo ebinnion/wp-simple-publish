@@ -202,8 +202,11 @@ class PostQueue {
 					const response = await fetch(imageUrl);
 					const blob = await response.blob();
 					
+					// Get the filename from the stored data attribute
+					const filename = post.data.imageFilenames?.[index] || `image-${index + 1}.jpg`;
+					
 					const formData = new FormData();
-					formData.append('file', blob, 'image.jpg');
+					formData.append('file', blob, filename);
 					formData.append('post', post.draftId);
 
 					const mediaEndpoint = new URL('/wp-json/wp/v2/media', post.data.config.url).toString();
@@ -599,11 +602,14 @@ document.addEventListener('DOMContentLoaded', () => {
 			const formatSelector = document.querySelector('#post-format');
 			formatSelector.value = files.length > 1 ? 'gallery' : 'image';
 
-			// Preview all selected images
+			// Preview all selected images and store filenames
 			Array.from(files).forEach(file => {
 				const reader = new FileReader();
 				reader.onload = (e) => {
-					imagePreview.innerHTML += `<img src="${e.target.result}">`;
+					const img = document.createElement('img');
+					img.src = e.target.result;
+					img.dataset.filename = file.name; // Store filename in data attribute
+					imagePreview.appendChild(img);
 				};
 				reader.readAsDataURL(file);
 			});
@@ -639,6 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				const postData = {
 					text,
 					imageUrls: Array.from(images).map(img => img.src),
+					imageFilenames: Array.from(images).map(img => img.dataset.filename), // Store filenames
 					config: wpConfig,
 					format,
 					status
