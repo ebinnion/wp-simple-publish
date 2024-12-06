@@ -8,8 +8,31 @@ const POST_STATUS = {
 class PostQueue {
 	constructor() {
 		this.posts = new Map();
-		this.loadFromStorage();
-		this.setupServiceWorker();
+		this.dbName = 'postQueueDB';
+		this.storeName = 'posts';
+		this.setupDB().then(() => {
+			this.loadFromStorage();
+			this.setupServiceWorker();
+		});
+	}
+
+	async setupDB() {
+		return new Promise((resolve, reject) => {
+			const request = indexedDB.open(this.dbName, 1);
+			
+			request.onerror = () => reject(request.error);
+			request.onsuccess = () => {
+				this.db = request.result;
+				resolve();
+			};
+			
+			request.onupgradeneeded = (event) => {
+				const db = event.target.result;
+				if (!db.objectStoreNames.contains(this.storeName)) {
+					db.createObjectStore(this.storeName, { keyPath: 'id' });
+				}
+			};
+		});
 	}
 
 	async setupServiceWorker() {
@@ -223,22 +246,45 @@ class PostQueue {
 		return postResponse.json();
 	}
 
-	loadFromStorage() {
+	async loadFromStorage() {
 		try {
-			const stored = localStorage.getItem('postQueue');
-			if (stored) {
-				const parsed = JSON.parse(stored);
-				this.posts = new Map(Object.entries(parsed));
-			}
+			const transaction = this.db.transaction(this.storeName, 'readonly');
+			const store = transaction.objectStore(this.storeName);
+			const request = store.getAll();
+
+			request.onsuccess = () => {
+				const posts = request.result;
+				this.posts = new Map(posts.map(post => [post.id, post]));
+				this.updateUI();
+				
+				// Process any queued items if we're online
+				if (navigator.onLine) {
+					setTimeout(() => {
+						for (const [id, post] of this.posts.entries()) {
+							if (post.status === POST_STATUS.QUEUED) {
+								this.processPost(id);
+							}
+						}
+					}, 0);
+				}
+			};
 		} catch (error) {
 			console.error('Failed to load queue:', error);
 		}
 	}
 
-	saveToStorage() {
+	async saveToStorage() {
 		try {
-			const obj = Object.fromEntries(this.posts);
-			localStorage.setItem('postQueue', JSON.stringify(obj));
+			const transaction = this.db.transaction(this.storeName, 'readwrite');
+			const store = transaction.objectStore(this.storeName);
+			
+			// Clear existing entries
+			store.clear();
+			
+			// Add current posts
+			for (const post of this.posts.values()) {
+				store.add(post);
+			}
 		} catch (error) {
 			console.error('Failed to save queue:', error);
 		}

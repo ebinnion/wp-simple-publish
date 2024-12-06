@@ -1,4 +1,4 @@
-const CACHE_NAME = 'post-app-c45ced4';
+const CACHE_NAME = 'post-app-21be1d5';
 const POST_QUEUE_NAME = 'post-queue';
 
 self.addEventListener('install', (event) => {
