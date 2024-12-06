@@ -149,6 +149,11 @@ button {
 	max-width: 400px;
 }
 
+
+.modal-content h2 {
+	margin-top: 0;
+}
+
 .modal-buttons {
 	display: flex;
 	gap: 10px;
