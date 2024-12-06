@@ -689,6 +689,24 @@ document.addEventListener('DOMContentLoaded', () => {
 function createSettingsModal(config) {
 	const modal = document.createElement('div');
 	modal.className = 'settings-modal';
+	
+	// Check if we have any settings saved
+	const hasSettings = !!(config.url || config.username || config.password);
+	
+	// Check if we have any items in the queue
+	const hasQueueItems = postQueue.posts.size > 0;
+	
+	// Only show danger zone if we have either settings or queue items
+	const dangerZoneHtml = (hasSettings || hasQueueItems) ? `
+		<div class="modal-danger-zone">
+			<h4>Danger Zone</h4>
+			<div class="danger-buttons">
+				${hasSettings ? '<button id="clearSettings" class="danger">Clear Settings</button>' : ''}
+				${hasQueueItems ? '<button id="clearQueue" class="danger">Clear Queue</button>' : ''}
+			</div>
+		</div>
+	` : '';
+	
 	modal.innerHTML = `
 		<div class="modal-content">
 			<h2>WordPress Settings</h2>
@@ -700,17 +718,49 @@ function createSettingsModal(config) {
 				<button id="saveSettings">Save</button>
 				<button id="cancelSettings">Cancel</button>
 			</div>
-			<div class="modal-danger-zone">
-				<h4>Danger Zone</h4>
-				<div class="danger-buttons">
-					<button id="clearSettings" class="danger">Clear Settings</button>
-					<button id="clearQueue" class="danger">Clear Queue</button>
-				</div>
-			</div>
+			${dangerZoneHtml}
 		</div>
 	`;
 
-	modal.querySelector('#saveSettings').addEventListener('click', () => {
+	// Add styles for danger zone if not already added
+	if (!document.querySelector('#danger-zone-styles')) {
+		const style = document.createElement('style');
+		style.id = 'danger-zone-styles';
+		style.textContent = `
+			.modal-danger-zone {
+				margin-top: 20px;
+				padding-top: 20px;
+				border-top: 1px solid var(--border-color);
+			}
+
+			.modal-danger-zone h4 {
+				color: var(--danger-color);
+				margin: 0 0 10px 0;
+				font-size: 14px;
+			}
+
+			.danger-buttons {
+				display: flex;
+				gap: 10px;
+			}
+
+			button.danger {
+				background: var(--danger-color);
+				color: white;
+				opacity: 0.8;
+				font-size: 13px;
+				padding: 8px 12px;
+			}
+
+			button.danger:hover {
+				opacity: 1;
+			}
+		`;
+		document.head.appendChild(style);
+	}
+
+	// Add save and cancel handlers
+	modal.querySelector('#saveSettings')?.addEventListener('click', () => {
 		config.url = modal.querySelector('#wp_url').value;
 		config.username = modal.querySelector('#wp_username').value;
 		config.password = modal.querySelector('#wp_password').value;
@@ -722,13 +772,18 @@ function createSettingsModal(config) {
 
 		notices.success('Settings saved successfully');
 		modal.style.display = 'none';
+		
+		// Refresh the modal to show/hide clear settings button
+		document.body.removeChild(modal);
+		document.body.appendChild(createSettingsModal(config));
 	});
 
-	modal.querySelector('#cancelSettings').addEventListener('click', () => {
+	modal.querySelector('#cancelSettings')?.addEventListener('click', () => {
 		modal.style.display = 'none';
 	});
 
-	modal.querySelector('#clearSettings').addEventListener('click', () => {
+	// Add clear settings handler if button exists
+	modal.querySelector('#clearSettings')?.addEventListener('click', () => {
 		if (confirm('Are you sure you want to clear all WordPress settings? This will remove your saved site URL, username, and password.')) {
 			localStorage.removeItem('wp_url');
 			localStorage.removeItem('wp_username');
@@ -745,10 +800,15 @@ function createSettingsModal(config) {
 			modal.querySelector('#wp_password').value = '';
 			
 			notices.success('Settings cleared successfully');
+			
+			// Refresh the modal to hide the clear settings button
+			document.body.removeChild(modal);
+			document.body.appendChild(createSettingsModal(config));
 		}
 	});
 
-	modal.querySelector('#clearQueue').addEventListener('click', () => {
+	// Add clear queue handler if button exists
+	modal.querySelector('#clearQueue')?.addEventListener('click', () => {
 		if (confirm('Are you sure you want to clear the queue? This will remove all pending posts and uploads.')) {
 			postQueue.posts.clear();
 			const transaction = postQueue.db.transaction(postQueue.storeName, 'readwrite');
@@ -757,6 +817,10 @@ function createSettingsModal(config) {
 				postQueue.updateUI();
 				notices.success('Queue cleared successfully');
 				modal.style.display = 'none';
+				
+				// Refresh the modal to hide the clear queue button
+				document.body.removeChild(modal);
+				document.body.appendChild(createSettingsModal(config));
 			};
 		}
 	});
