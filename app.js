@@ -1,303 +1,303 @@
 const POST_STATUS = {
-	QUEUED: 'queued',
-	UPLOADING: 'uploading',
-	COMPLETED: 'completed',
-	FAILED: 'failed'
+    QUEUED: 'queued',
+    UPLOADING: 'uploading',
+    COMPLETED: 'completed',
+    FAILED: 'failed'
 };
 
 class PostQueue {
-	constructor() {
-		this.posts = new Map();
-		this.dbName = 'postQueueDB';
-		this.storeName = 'posts';
-		this.ready = false;
-		this.initPromise = this.init();
-	}
+    constructor() {
+        this.posts = new Map();
+        this.dbName = 'postQueueDB';
+        this.storeName = 'posts';
+        this.ready = false;
+        this.initPromise = this.init();
+    }
 
-	async init() {
-		try {
-			await this.setupDB();
-			await this.loadFromStorage();
-			await this.setupServiceWorker();
-			this.ready = true;
-			
-			// Process any non-completed items if we're online
-			if (navigator.onLine) {
-				for (const [id, post] of this.posts.entries()) {
-					if (post.status !== POST_STATUS.COMPLETED) {
-						// Don't reset status - we want to resume from where we left off
-						await this.processPost(id);
-					}
-				}
-			}
-		} catch (error) {
-			console.error('Failed to initialize queue:', error);
-			this.ready = false;
-			throw error;
-		}
-	}
+    async init() {
+        try {
+            await this.setupDB();
+            await this.loadFromStorage();
+            await this.setupServiceWorker();
+            this.ready = true;
 
-	async setupDB() {
-		return new Promise((resolve, reject) => {
-			const request = indexedDB.open(this.dbName, 1);
-			
-			request.onerror = () => reject(request.error);
-			request.onsuccess = () => {
-				this.db = request.result;
-				resolve();
-			};
-			
-			request.onupgradeneeded = (event) => {
-				const db = event.target.result;
-				if (!db.objectStoreNames.contains(this.storeName)) {
-					db.createObjectStore(this.storeName, { keyPath: 'id' });
-				}
-			};
-		});
-	}
+            // Process any non-completed items if we're online
+            if (navigator.onLine) {
+                for (const [id, post] of this.posts.entries()) {
+                    if (post.status !== POST_STATUS.COMPLETED) {
+                        // Don't reset status - we want to resume from where we left off
+                        await this.processPost(id);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Failed to initialize queue:', error);
+            this.ready = false;
+            throw error;
+        }
+    }
 
-	async setupServiceWorker() {
-		// Only try to register if we're in a secure context (https or localhost)
-		const isSecureContext = window.isSecureContext || 
-			window.location.protocol === 'https:' || 
-			window.location.hostname === 'localhost' ||
-			window.location.hostname === '127.0.0.1';
+    async setupDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, 1);
 
-		if ('serviceWorker' in navigator && isSecureContext) {
-			try {
-				const registration = await navigator.serviceWorker.register('sw.js');
-				registration.addEventListener('message', (event) => {
-					if (event.data.type === 'POST_SYNCED') {
-						this.handleSyncResult(event.data);
-					}
-				});
-			} catch (error) {
-				console.warn('ServiceWorker registration skipped:', error.message);
-			}
-		} else {
-			console.log('ServiceWorker not supported or not in a secure context');
-		}
-	}
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => {
+                this.db = request.result;
+                resolve();
+            };
 
-	handleSyncResult(data) {
-		const post = this.posts.get(data.id);
-		if (post) {
-			if (data.success) {
-				post.status = POST_STATUS.COMPLETED;
-				notices.success('Post published successfully!');
-				// Remove after a delay
-				setTimeout(() => {
-					this.posts.delete(data.id);
-					this.saveToStorage();
-					this.updateUI();
-				}, 3000);
-			} else {
-				post.status = POST_STATUS.FAILED;
-				post.error = data.error;
-				notices.error('Failed to publish: ' + data.error);
-			}
-			this.saveToStorage();
-			this.updateUI(data.id);
-		}
-	}
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains(this.storeName)) {
+                    db.createObjectStore(this.storeName, { keyPath: 'id' });
+                }
+            };
+        });
+    }
 
-	generateId() {
-		return `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-	}
+    async setupServiceWorker() {
+        // Only try to register if we're in a secure context (https or localhost)
+        const isSecureContext = window.isSecureContext ||
+            window.location.protocol === 'https:' ||
+            window.location.hostname === 'localhost' ||
+            window.location.hostname === '127.0.0.1';
 
-	async add(postData) {
-		// Wait for initialization to complete
-		if (!this.ready) {
-			await this.initPromise;
-		}
-		
-		const id = this.generateId();
-		const post = {
-			id,
-			data: postData,
-			status: POST_STATUS.QUEUED,
-			createdAt: Date.now(),
-			error: null,
-			mediaProgress: {
-				uploadedIds: [],
-				uploadedUrls: []
-			}
-		};
+        if ('serviceWorker' in navigator && isSecureContext) {
+            try {
+                const registration = await navigator.serviceWorker.register('sw.js');
+                registration.addEventListener('message', (event) => {
+                    if (event.data.type === 'POST_SYNCED') {
+                        this.handleSyncResult(event.data);
+                    }
+                });
+            } catch (error) {
+                console.warn('ServiceWorker registration skipped:', error.message);
+            }
+        } else {
+            console.log('ServiceWorker not supported or not in a secure context');
+        }
+    }
 
-		this.posts.set(id, post);
-		await this.saveToStorage();
-		this.updateUI();
+    handleSyncResult(data) {
+        const post = this.posts.get(data.id);
+        if (post) {
+            if (data.success) {
+                post.status = POST_STATUS.COMPLETED;
+                notices.success('Post published successfully!');
+                // Remove after a delay
+                setTimeout(() => {
+                    this.posts.delete(data.id);
+                    this.saveToStorage();
+                    this.updateUI();
+                }, 3000);
+            } else {
+                post.status = POST_STATUS.FAILED;
+                post.error = data.error;
+                notices.error('Failed to publish: ' + data.error);
+            }
+            this.saveToStorage();
+            this.updateUI(data.id);
+        }
+    }
 
-		if (navigator.onLine) {
-			await this.processPost(id);
-		} else {
-			try {
-				const registration = await navigator.serviceWorker.ready;
-				await registration.sync.register('sync-posts');
-			} catch (error) {
-				console.error('Background sync registration failed:', error);
-			}
-		}
+    generateId() {
+        return `post_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
 
-		return id;
-	}
+    async add(postData) {
+        // Wait for initialization to complete
+        if (!this.ready) {
+            await this.initPromise;
+        }
 
-	async processPost(id) {
-		const post = this.posts.get(id);
-		if (!post || post.status === POST_STATUS.COMPLETED) return;
+        const id = this.generateId();
+        const post = {
+            id,
+            data: postData,
+            status: POST_STATUS.QUEUED,
+            createdAt: Date.now(),
+            error: null,
+            mediaProgress: {
+                uploadedIds: [],
+                uploadedUrls: []
+            }
+        };
 
-		try {
-			// Validate site URL
-			if (!post.data.config.url) {
-				throw new Error('WordPress site URL not configured. Please check your settings.');
-			}
+        this.posts.set(id, post);
+        await this.saveToStorage();
+        this.updateUI();
 
-			try {
-				const url = new URL(post.data.config.url);
-				if (!url.protocol.startsWith('http')) {
-					throw new Error('WordPress site URL must start with http:// or https://');
-				}
-				post.data.config.url = url.origin + url.pathname.replace(/\/$/, '');
-			} catch (error) {
-				throw new Error('Invalid WordPress site URL. Please check your settings.');
-			}
+        if (navigator.onLine) {
+            await this.processPost(id);
+        } else {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                await registration.sync.register('sync-posts');
+            } catch (error) {
+                console.error('Background sync registration failed:', error);
+            }
+        }
 
-			post.status = POST_STATUS.UPLOADING;
-			post.mediaProgress = post.mediaProgress || {
-				uploadedIds: [],
-				uploadedUrls: [],
-				currentFile: 0,
-				currentFileProgress: 0
-			};
-			post.draftId = post.draftId || null;
-			this.updateUI(id);
-			await this.saveToStorage();
+        return id;
+    }
 
-			// Create or resume draft post
-			if (!post.draftId) {
-				console.log('Creating initial draft post...');
-				const draftPost = await this.createPost({
-					...post.data,
-					status: 'draft',
-					content: 'Uploading media...'
-				});
+    async processPost(id) {
+        const post = this.posts.get(id);
+        if (!post || post.status === POST_STATUS.COMPLETED) return;
 
-				console.log('Draft post created:', draftPost.id);
-				post.draftId = draftPost.id;
-				await this.saveToStorage();
-			} else {
-				console.log('Resuming with existing draft:', post.draftId);
-			}
+        try {
+            // Validate site URL
+            if (!post.data.config.url) {
+                throw new Error('WordPress site URL not configured. Please check your settings.');
+            }
 
-			// Upload remaining images with progress tracking
-			const remainingImages = post.data.imageUrls.slice(post.mediaProgress.uploadedIds.length);
-			console.log(`Uploading ${remainingImages.length} remaining images...`);
-			
-			for (const [index, imageUrl] of remainingImages.entries()) {
-				try {
-					post.mediaProgress.currentFile = post.mediaProgress.uploadedIds.length;
-					post.mediaProgress.currentFileProgress = 0;
-					this.updateUI(id);
+            try {
+                const url = new URL(post.data.config.url);
+                if (!url.protocol.startsWith('http')) {
+                    throw new Error('WordPress site URL must start with http:// or https://');
+                }
+                post.data.config.url = url.origin + url.pathname.replace(/\/$/, '');
+            } catch (error) {
+                throw new Error('Invalid WordPress site URL. Please check your settings.');
+            }
 
-					const response = await fetch(imageUrl);
-					const blob = await response.blob();
-					
-					// Get the filename from the stored data attribute
-					const filename = post.data.imageFilenames?.[index] || `image-${index + 1}.jpg`;
-					
-					const formData = new FormData();
-					formData.append('file', blob, filename);
-					formData.append('post', post.draftId);
+            post.status = POST_STATUS.UPLOADING;
+            post.mediaProgress = post.mediaProgress || {
+                uploadedIds: [],
+                uploadedUrls: [],
+                currentFile: 0,
+                currentFileProgress: 0
+            };
+            post.draftId = post.draftId || null;
+            this.updateUI(id);
+            await this.saveToStorage();
 
-					const mediaEndpoint = new URL('/wp-json/wp/v2/media', post.data.config.url).toString();
-					console.log(`Uploading media ${index + 1} of ${remainingImages.length} to:`, mediaEndpoint);
+            // Create or resume draft post
+            if (!post.draftId) {
+                console.log('Creating initial draft post...');
+                const draftPost = await this.createPost({
+                    ...post.data,
+                    status: 'draft',
+                    content: 'Uploading media...'
+                });
 
-					const mediaData = await this.uploadMedia(mediaEndpoint, post.data.config, formData);
-					post.mediaProgress.uploadedIds.push(mediaData.id);
-					post.mediaProgress.uploadedUrls.push(mediaData.source_url);
-					post.mediaProgress.currentFileProgress = 100;
-					await this.saveToStorage();
-					this.updateUI(id);
-				} catch (error) {
-					console.error('Image upload failed:', error);
-					throw new Error(`Failed to upload image: ${error.message}`);
-				}
-			}
-			
-			// Update the draft with content and final status
-			console.log('Updating post with content and media...');
-			const finalPost = await this.updatePost({
-				...post.data,
-				postId: post.draftId,
-				mediaIds: post.mediaProgress.uploadedIds,
-				mediaUrls: post.mediaProgress.uploadedUrls
-			});
+                console.log('Draft post created:', draftPost.id);
+                post.draftId = draftPost.id;
+                await this.saveToStorage();
+            } else {
+                console.log('Resuming with existing draft:', post.draftId);
+            }
 
-			post.status = POST_STATUS.COMPLETED;
-			post.result = finalPost;
-			notices.success(post.data.status === 'publish' ? 'Post published successfully!' : 'Draft saved successfully!');
-			
-			// Remove from queue after success
-			setTimeout(() => {
-				this.posts.delete(id);
-				this.saveToStorage();
-				this.updateUI();
-			}, 3000);
+            // Upload remaining images with progress tracking
+            const remainingImages = post.data.imageUrls.slice(post.mediaProgress.uploadedIds.length);
+            console.log(`Uploading ${remainingImages.length} remaining images...`);
 
-		} catch (error) {
-			console.error('Failed to process post:', error);
-			post.status = POST_STATUS.FAILED;
-			post.error = error.message;
-			notices.error(`Failed to ${post.data.status === 'publish' ? 'publish post' : 'save draft'}: ${error.message}`);
-			this.updateUI(id);
-			await this.saveToStorage();
-		}
-	}
+            for (const [index, imageUrl] of remainingImages.entries()) {
+                try {
+                    post.mediaProgress.currentFile = post.mediaProgress.uploadedIds.length;
+                    post.mediaProgress.currentFileProgress = 0;
+                    this.updateUI(id);
 
-	async createPost(postData) {
-		// Validate site URL
-		if (!postData.config.url || !postData.config.url.startsWith('http')) {
-			throw new Error('Invalid WordPress site URL. Please check your settings.');
-		}
+                    const response = await fetch(imageUrl);
+                    const blob = await response.blob();
 
-		const endpoint = new URL('/wp-json/wp/v2/posts', postData.config.url).toString();
-		console.log('Creating post at:', endpoint);
+                    // Get the filename from the stored data attribute
+                    const filename = post.data.imageFilenames ? .[index] || `image-${index + 1}.jpg`;
 
-		const postResponse = await fetch(endpoint, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				'Authorization': 'Basic ' + btoa(`${postData.config.username}:${postData.config.password}`)
-			},
-			body: JSON.stringify({
-				title: postData.text.split('\n')[0] || 'New Post',
-				content: postData.content || postData.text,
-				status: postData.status,
-				format: postData.format
-			})
-		});
+                    const formData = new FormData();
+                    formData.append('file', blob, filename);
+                    formData.append('post', post.draftId);
 
-		if (!postResponse.ok) {
-			const errorText = await postResponse.text();
-			console.error('Post creation failed:', postResponse.status, errorText);
-			throw new Error(`Failed to create post (HTTP ${postResponse.status})`);
-		}
+                    const mediaEndpoint = new URL('/wp-json/wp/v2/media', post.data.config.url).toString();
+                    console.log(`Uploading media ${index + 1} of ${remainingImages.length} to:`, mediaEndpoint);
 
-		return postResponse.json();
-	}
+                    const mediaData = await this.uploadMedia(mediaEndpoint, post.data.config, formData);
+                    post.mediaProgress.uploadedIds.push(mediaData.id);
+                    post.mediaProgress.uploadedUrls.push(mediaData.source_url);
+                    post.mediaProgress.currentFileProgress = 100;
+                    await this.saveToStorage();
+                    this.updateUI(id);
+                } catch (error) {
+                    console.error('Image upload failed:', error);
+                    throw new Error(`Failed to upload image: ${error.message}`);
+                }
+            }
 
-	async updatePost(postData) {
-		// Format content with Gutenberg blocks
-		let blocks = [];
-		
-		// Add image/gallery block if we have images
-		if (postData.mediaIds.length > 0) {
-			if (postData.mediaIds.length === 1) {
-				blocks.push(`<!-- wp:image {"id":${postData.mediaIds[0]},"sizeSlug":"large"} -->
+            // Update the draft with content and final status
+            console.log('Updating post with content and media...');
+            const finalPost = await this.updatePost({
+                ...post.data,
+                postId: post.draftId,
+                mediaIds: post.mediaProgress.uploadedIds,
+                mediaUrls: post.mediaProgress.uploadedUrls
+            });
+
+            post.status = POST_STATUS.COMPLETED;
+            post.result = finalPost;
+            notices.success(post.data.status === 'publish' ? 'Post published successfully!' : 'Draft saved successfully!');
+
+            // Remove from queue after success
+            setTimeout(() => {
+                this.posts.delete(id);
+                this.saveToStorage();
+                this.updateUI();
+            }, 3000);
+
+        } catch (error) {
+            console.error('Failed to process post:', error);
+            post.status = POST_STATUS.FAILED;
+            post.error = error.message;
+            notices.error(`Failed to ${post.data.status === 'publish' ? 'publish post' : 'save draft'}: ${error.message}`);
+            this.updateUI(id);
+            await this.saveToStorage();
+        }
+    }
+
+    async createPost(postData) {
+        // Validate site URL
+        if (!postData.config.url || !postData.config.url.startsWith('http')) {
+            throw new Error('Invalid WordPress site URL. Please check your settings.');
+        }
+
+        const endpoint = new URL('/wp-json/wp/v2/posts', postData.config.url).toString();
+        console.log('Creating post at:', endpoint);
+
+        const postResponse = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Basic ' + btoa(`${postData.config.username}:${postData.config.password}`)
+            },
+            body: JSON.stringify({
+                title: '',
+                content: postData.content || postData.text,
+                status: postData.status,
+                format: postData.format
+            })
+        });
+
+        if (!postResponse.ok) {
+            const errorText = await postResponse.text();
+            console.error('Post creation failed:', postResponse.status, errorText);
+            throw new Error(`Failed to create post (HTTP ${postResponse.status})`);
+        }
+
+        return postResponse.json();
+    }
+
+    async updatePost(postData) {
+            // Format content with Gutenberg blocks
+            let blocks = [];
+
+            // Add image/gallery block if we have images
+            if (postData.mediaIds.length > 0) {
+                if (postData.mediaIds.length === 1) {
+                    blocks.push(`<!-- wp:image {"id":${postData.mediaIds[0]},"sizeSlug":"large"} -->
 <figure class="wp-block-image size-large"><img src="${postData.mediaUrls[0]}" alt="" class="wp-image-${postData.mediaIds[0]}"/></figure>
 <!-- /wp:image -->`);
-			} else {
-				blocks.push(`<!-- wp:gallery {"columns":2,"linkTo":"none","ids":[${postData.mediaIds.join(',')}]} -->
+                } else {
+                    blocks.push(`<!-- wp:gallery {"columns":2,"linkTo":"none","ids":[${postData.mediaIds.join(',')}]} -->
 <figure class="wp-block-gallery has-nested-images columns-2 is-cropped">
 	${postData.mediaUrls.map((url, index) => `
 	<!-- wp:image {"id":${postData.mediaIds[index]},"sizeSlug":"large","linkDestination":"none"} -->
@@ -380,10 +380,10 @@ class PostQueue {
 		try {
 			const transaction = this.db.transaction(this.storeName, 'readwrite');
 			const store = transaction.objectStore(this.storeName);
-			
+
 			// Clear existing entries
 			store.clear();
-			
+
 			// Add current posts
 			for (const post of this.posts.values()) {
 				store.add(post);
@@ -396,51 +396,51 @@ class PostQueue {
 	updateUI(id = null) {
 		const queueContainer = document.querySelector('.queue-container') || this.createQueueContainer();
 		const queueList = queueContainer.querySelector('.queue-list');
-		
+
 		if (this.posts.size === 0) {
 			queueContainer.style.display = 'none';
 			return;
 		}
-		
+
 		queueContainer.style.display = 'block';
 		queueList.innerHTML = '';
-		
+
 		for (const [postId, post] of this.posts.entries()) {
 			const item = document.createElement('div');
 			item.className = 'queue-item';
-			
+
 			const header = document.createElement('div');
 			header.className = 'queue-item-header';
-			
+
 			const title = document.createElement('div');
 			title.className = 'title';
 			title.textContent = post.data.text.split('\n')[0] || 'New Post';
-			
+
 			const status = document.createElement('div');
 			status.className = 'status';
 			status.textContent = post.status;
-			
+
 			header.appendChild(title);
 			header.appendChild(status);
 			item.appendChild(header);
-			
+
 			// Add progress indicator only during media uploads
-			if (post.status === POST_STATUS.UPLOADING && 
-				post.data.imageUrls.length > 0 && 
+			if (post.status === POST_STATUS.UPLOADING &&
+				post.data.imageUrls.length > 0 &&
 				post.mediaProgress.uploadedIds.length < post.data.imageUrls.length) {
-				
+
 				const progress = document.createElement('div');
 				progress.className = 'upload-progress';
-				
+
 				const uploadedCount = post.mediaProgress?.uploadedIds?.length || 0;
 				const totalCount = post.data.imageUrls.length;
 				const currentFileProgress = post.mediaProgress?.currentFileProgress || 0;
-				
+
 				// Calculate total progress including current file
 				const completedProgress = (uploadedCount / totalCount) * 100;
 				const currentFileContribution = (currentFileProgress / 100) * (1 / totalCount) * 100;
 				const totalProgress = Math.min(Math.round(completedProgress + currentFileContribution), 100);
-				
+
 				progress.innerHTML = `
 					<div class="progress-bar">
 						<div class="progress-fill" style="width: ${totalProgress}%"></div>
@@ -461,14 +461,14 @@ class PostQueue {
 				`;
 				item.appendChild(progress);
 			}
-			
+
 			if (post.error) {
 				const error = document.createElement('div');
 				error.className = 'error';
 				error.textContent = post.error;
 				item.appendChild(error);
 			}
-			
+
 			queueList.appendChild(item);
 		}
 	}
@@ -487,7 +487,7 @@ class PostQueue {
 	async uploadMedia(url, config, formData) {
 		return new Promise((resolve, reject) => {
 			const xhr = new XMLHttpRequest();
-			
+
 			xhr.upload.addEventListener('progress', (event) => {
 				if (event.lengthComputable) {
 					const progress = (event.loaded / event.total) * 100;
@@ -495,7 +495,7 @@ class PostQueue {
 					this.updateUI(); // Update UI with current file progress
 				}
 			});
-			
+
 			xhr.addEventListener('load', () => {
 				if (xhr.status >= 200 && xhr.status < 300) {
 					try {
@@ -508,15 +508,15 @@ class PostQueue {
 					reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText}`));
 				}
 			});
-			
+
 			xhr.addEventListener('error', () => {
 				reject(new Error('Network error during upload'));
 			});
-			
+
 			xhr.addEventListener('abort', () => {
 				reject(new Error('Upload aborted'));
 			});
-			
+
 			xhr.open('POST', url);
 			xhr.setRequestHeader('Authorization', 'Basic ' + btoa(`${config.username}:${config.password}`));
 			xhr.send(formData);
@@ -529,41 +529,41 @@ const postQueue = new PostQueue();
 
 const notices = {
 	container: null,
-	
+
 	init: function() {
 		this.container = document.createElement('div');
 		this.container.className = 'notices';
 		document.body.appendChild(this.container);
 	},
-	
+
 	show: function(message, type = 'info') {
 		const notice = document.createElement('div');
 		notice.className = `notice notice-${type}`;
-		
+
 		const text = document.createElement('span');
 		text.textContent = message;
-		
+
 		const closeBtn = document.createElement('button');
 		closeBtn.className = 'notice-close';
 		closeBtn.innerHTML = '×';
 		closeBtn.onclick = () => notice.remove();
-		
+
 		notice.appendChild(text);
 		notice.appendChild(closeBtn);
 		this.container.appendChild(notice);
-		
+
 		// Optional: Auto-remove after 5 seconds
 		setTimeout(() => notice.remove(), 5000);
 	},
-	
+
 	success: function(message) {
 		this.show(message, 'success');
 	},
-	
+
 	info: function(message) {
 		this.show(message, 'info');
 	},
-	
+
 	error: function(message) {
 		this.show(message, 'error');
 	}
@@ -597,7 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		const files = e.target.files;
 		if (files.length > 0) {
 			imagePreview.innerHTML = ''; // Clear previous previews
-			
+
 			// Update post format based on number of images
 			const formatSelector = document.querySelector('#post-format');
 			formatSelector.value = files.length > 1 ? 'gallery' : 'image';
@@ -636,12 +636,12 @@ document.addEventListener('DOMContentLoaded', () => {
 		const text = document.querySelector('textarea').value;
 		const images = imagePreview.querySelectorAll('img');
 		const format = document.querySelector('#post-format').value;
-		
+
 		if (text || images.length > 0) {
 			try {
 				publishButton.disabled = true;
 				draftButton.disabled = true;
-				
+
 				const postData = {
 					text,
 					imageUrls: Array.from(images).map(img => img.src),
@@ -665,7 +665,7 @@ document.addEventListener('DOMContentLoaded', () => {
 					// Process immediately if online
 					const id = await postQueue.add(postData);
 				}
-				
+
 			} catch (error) {
 				// If there was an error, restore the form data
 				document.querySelector('textarea').value = text;
@@ -713,10 +713,10 @@ function createSettingsModal(config) {
 function updateSettingsModalContent(modal, config) {
 	// Check if we have any settings saved
 	const hasSettings = !!(config.url || config.username || config.password);
-	
+
 	// Check if we have any items in the queue
 	const hasQueueItems = postQueue.posts.size > 0;
-	
+
 	// Only show danger zone if we have either settings or queue items
 	const dangerZoneHtml = (hasSettings || hasQueueItems) ? `
 		<div class="modal-danger-zone">
@@ -727,7 +727,7 @@ function updateSettingsModalContent(modal, config) {
 			</div>
 		</div>
 	` : '';
-	
+
 	modal.innerHTML = `
 		<div class="modal-content">
 			<h2>WordPress Settings</h2>
@@ -756,7 +756,7 @@ function updateSettingsModalContent(modal, config) {
 
 		notices.success('Settings saved successfully');
 		modal.style.display = 'none';
-		
+
 		// Update modal content instead of recreating
 		updateSettingsModalContent(modal, config);
 	});
@@ -771,14 +771,14 @@ function updateSettingsModalContent(modal, config) {
 			localStorage.removeItem('wp_url');
 			localStorage.removeItem('wp_username');
 			localStorage.removeItem('wp_password');
-			
+
 			// Clear the config object
 			config.url = '';
 			config.username = '';
 			config.password = '';
-			
+
 			notices.success('Settings cleared successfully');
-			
+
 			// Update modal content instead of recreating
 			updateSettingsModalContent(modal, config);
 		}
@@ -794,7 +794,7 @@ function updateSettingsModalContent(modal, config) {
 				postQueue.updateUI();
 				notices.success('Queue cleared successfully');
 				modal.style.display = 'none';
-				
+
 				// Update modal content instead of recreating
 				updateSettingsModalContent(modal, config);
 			};
@@ -812,7 +812,7 @@ async function publishToWordPress(text, imageUrls, config, format) {
 	try {
 		let mediaIds = [];
 		let mediaUrls = [];
-		
+
 		// Upload all images
 		if (imageUrls.length > 0) {
 			console.log('Uploading images...');
@@ -820,7 +820,7 @@ async function publishToWordPress(text, imageUrls, config, format) {
 				// Convert base64 to blob
 				const response = await fetch(imageUrl);
 				const blob = await response.blob();
-				
+
 				// Upload image
 				const formData = new FormData();
 				formData.append('file', blob, 'image.jpg');
@@ -847,7 +847,7 @@ async function publishToWordPress(text, imageUrls, config, format) {
 
 		// Format content with Gutenberg blocks
 		let blocks = [];
-		
+
 		// Add image/gallery block if we have images
 		if (mediaUrls.length > 0) {
 			if (mediaUrls.length === 1) {
@@ -878,10 +878,10 @@ async function publishToWordPress(text, imageUrls, config, format) {
 		const content = blocks.join('\n\n');
 
 		console.log('Creating post...');
-		
+
 		// Create post
 		const postData = {
-			title: text.split('\n')[0] || 'New Post',
+			title: '',
 			content: content,
 			status: 'publish',
 			featured_media: mediaIds[0] || 0,
