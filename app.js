@@ -203,7 +203,7 @@ class PostQueue {
                     const blob = await response.blob();
 
                     // Get the filename from the stored data attribute
-                    const filename = post.data.imageFilenames ? .[index] || `image-${index + 1}.jpg`;
+                    const filename = (post.data.imageFilenames && post.data.imageFilenames[index]) || `image-${index + 1}.jpg`;
 
                     const formData = new FormData();
                     formData.append('file', blob, filename);
