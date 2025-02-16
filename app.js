@@ -329,7 +329,7 @@ class PostQueue {
 				'Authorization': 'Basic ' + btoa(`${postData.config.username}:${postData.config.password}`)
 			},
 			body: JSON.stringify({
-				title: postData.text.split('\n')[0] || 'New Post',
+				title: '',
 				content: content,
 				status: postData.status,
 				featured_media: postData.mediaIds[0] || 0,
